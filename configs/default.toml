@@ -1,0 +1,19 @@
+[daemon]
+addr = "127.0.0.1"
+port = 8765
+socket_path = "~/.mayla/daemon.sock"
+max_connections = 100
+
+[database]
+path = "~/.mayla/mayla.db"
+driver = "sqlite3"
+
+[logging]
+level = "info"
+format = "json"
+output = "stderr"
+
+[server]
+protocol_version = "2024-11-05"
+name = "May-la MCP Server"
+version = "0.1.0"
