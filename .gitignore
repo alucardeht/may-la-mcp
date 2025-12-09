@@ -1,0 +1,12 @@
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+.DS_Store
+*.db
+.env
+.env.local
+dist/
+*.log
+coverage.txt
