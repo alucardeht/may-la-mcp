@@ -1,7 +1,7 @@
 package registry
 
 import (
-	"github.com/maylamcp/mayla/internal/tools/files"
+	"github.com/alucardeht/may-la-mcp/internal/tools/files"
 	"log"
 )
 

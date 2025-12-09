@@ -1,7 +1,7 @@
 package search
 
 import (
-	"github.com/maylamcp/mayla/internal/tools"
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 func GetTools() []tools.Tool {

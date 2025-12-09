@@ -57,39 +57,52 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 
 ## 🛠 Installation
 
-### Prerequisites
-- **Go 1.22** or later
-- **CGO enabled** (required for SQLite FTS5)
-- **ripgrep** (`brew install ripgrep` on macOS, `apt install ripgrep` on Linux)
+### Quick Install (Recommended)
 
-### From Source
+May-la auto-installs and auto-updates. Just add it to Claude Code:
+
+**macOS / Linux:**
+```bash
+claude mcp add may-la -- bash -c "curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh | bash"
+```
+
+**Windows (PowerShell):**
+```powershell
+claude mcp add may-la -- powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1 | iex"
+```
+
+That's it! Restart Claude Code and May-la will be available.
+
+### What happens behind the scenes
+
+1. Claude runs the launcher script
+2. Launcher checks for the latest release on GitHub
+3. Downloads the pre-compiled binary for your platform (~10MB)
+4. Stores it in `~/.mayla/` (or `%USERPROFILE%\.mayla\` on Windows)
+5. Auto-updates when new versions are released
+
+### Supported Platforms
+
+| OS | Architecture | Status |
+|----|--------------|--------|
+| macOS | arm64 (Apple Silicon) | ✅ |
+| macOS | amd64 (Intel) | ✅ |
+| Linux | amd64 | ✅ |
+| Linux | arm64 | ✅ |
+| Windows | amd64 | ✅ |
+| Windows | arm64 | ✅ |
+
+### Build from Source (Optional)
+
+If you prefer to build yourself:
 
 ```bash
-# Clone repository
 git clone https://github.com/alucardeht/may-la-mcp.git
 cd may-la-mcp
-
-# Build daemon
-make daemon
-
-# Install to system (optional)
-make install
+go build -o mayla-daemon ./cmd/mayla-daemon
 ```
 
-### Register with Claude
-
-```bash
-# Add as MCP for your user
-claude mcp add may-la-mcp /path/to/mayla-daemon --scope user
-
-# Or for workspace-level access
-claude mcp add may-la-mcp /path/to/mayla-daemon --scope workspace
-```
-
-Verify installation:
-```bash
-mayla-daemon --health
-```
+Requirements: Go 1.22+
 
 ## 📖 Quick Start
 

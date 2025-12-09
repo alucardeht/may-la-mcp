@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/maylamcp/mayla/internal/tools"
-	"github.com/maylamcp/mayla/internal/tools/files"
-	"github.com/maylamcp/mayla/internal/tools/memory"
-	"github.com/maylamcp/mayla/internal/tools/search"
-	"github.com/maylamcp/mayla/internal/tools/spec"
+	"github.com/alucardeht/may-la-mcp/internal/tools"
+	"github.com/alucardeht/may-la-mcp/internal/tools/files"
+	"github.com/alucardeht/may-la-mcp/internal/tools/memory"
+	"github.com/alucardeht/may-la-mcp/internal/tools/search"
+	"github.com/alucardeht/may-la-mcp/internal/tools/spec"
 )
 
 func TestAllToolsE2E(t *testing.T) {

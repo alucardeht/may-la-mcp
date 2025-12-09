@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/maylamcp/mayla/internal/tools"
-	"github.com/maylamcp/mayla/pkg/protocol"
+	"github.com/alucardeht/may-la-mcp/internal/tools"
+	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 )
 
 type Handler struct {
