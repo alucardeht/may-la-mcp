@@ -20,14 +20,15 @@ import (
 )
 
 type Daemon struct {
-	socketPath  string
-	listener    net.Listener
-	registry    *tools.Registry
-	server      *mcp.Server
-	connections map[net.Conn]bool
-	connMu      sync.Mutex
-	shutdown    chan struct{}
-	startTime   time.Time
+	socketPath    string
+	listener      net.Listener
+	registry      *tools.Registry
+	server        *mcp.Server
+	connections   map[net.Conn]bool
+	connMu        sync.Mutex
+	shutdown      chan struct{}
+	shutdownOnce  sync.Once
+	startTime     time.Time
 }
 
 func NewDaemon(socketPath string) (*Daemon, error) {
@@ -166,19 +167,21 @@ func (d *Daemon) handleSignals() {
 }
 
 func (d *Daemon) Shutdown() {
-	close(d.shutdown)
+	d.shutdownOnce.Do(func() {
+		close(d.shutdown)
 
-	if d.listener != nil {
-		d.listener.Close()
-	}
+		if d.listener != nil {
+			d.listener.Close()
+		}
 
-	d.connMu.Lock()
-	for conn := range d.connections {
-		conn.Close()
-	}
-	d.connMu.Unlock()
+		d.connMu.Lock()
+		for conn := range d.connections {
+			conn.Close()
+		}
+		d.connMu.Unlock()
 
-	os.Remove(d.socketPath)
+		os.Remove(d.socketPath)
+	})
 }
 
 func (d *Daemon) SocketPath() string {

@@ -23,14 +23,13 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 
 ### 22 Production-Ready Tools Across 5 Categories
 
-#### 📁 File Operations (8 tools)
+#### 📁 File Operations (7 tools)
 - **`read`** — Read files with intelligent chunking and progress tracking
 - **`write`** — Write files with atomic operations and safety checks
 - **`edit`** — Edit files using search/replace with regex support
 - **`create`** — Create new files with directory structure validation
 - **`delete`** — Remove files and directories safely
 - **`move`** — Move and rename files
-- **`copy`** — Copy files with path resolution
 - **`list`** — List directory contents with filtering and sorting
 
 #### 🔍 Search & Navigation (4 tools)
@@ -63,15 +62,17 @@ May-la auto-installs and auto-updates. Just add it to Claude Code:
 
 **macOS / Linux:**
 ```bash
-claude mcp add may-la -- bash -c "curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh | bash"
+claude mcp add may-la -s user -- bash -c "curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh | bash"
 ```
 
 **Windows (PowerShell):**
 ```powershell
-claude mcp add may-la -- powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1 | iex"
+claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1 | iex"
 ```
 
 That's it! Restart Claude Code and May-la will be available.
+
+> **Note on `-s user` flag:** The `-s user` flag installs May-la globally for all projects in your workspace. This means you'll have access to May-la across all your Claude Code projects, not just the current one.
 
 ### What happens behind the scenes
 
