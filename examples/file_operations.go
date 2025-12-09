@@ -3,7 +3,7 @@ package examples
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/maylamcp/mayla/internal/registry"
+	"github.com/alucardeht/may-la-mcp/internal/registry"
 	"log"
 )
 

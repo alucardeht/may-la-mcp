@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/maylamcp/mayla/pkg/protocol"
+	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 )
 
 type Client struct {

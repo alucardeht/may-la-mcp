@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/maylamcp/mayla/internal/config"
-	"github.com/maylamcp/mayla/internal/daemon"
+	"github.com/alucardeht/may-la-mcp/internal/config"
+	"github.com/alucardeht/may-la-mcp/internal/daemon"
 )
 
 func main() {

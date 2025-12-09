@@ -10,9 +10,9 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/maylamcp/mayla/internal/config"
-	"github.com/maylamcp/mayla/internal/daemon"
-	"github.com/maylamcp/mayla/pkg/protocol"
+	"github.com/alucardeht/may-la-mcp/internal/config"
+	"github.com/alucardeht/may-la-mcp/internal/daemon"
+	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 )
 
 func main() {
