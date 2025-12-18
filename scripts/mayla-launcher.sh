@@ -37,6 +37,12 @@ download_binary() {
     echo "Downloading mayla-daemon $version for $platform..." >&2
     curl -sL "$daemon_url" -o "$MAYLA_DAEMON.tmp" && mv "$MAYLA_DAEMON.tmp" "$MAYLA_DAEMON" && chmod +x "$MAYLA_DAEMON"
 
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "Removing macOS quarantine attributes..." >&2
+        xattr -d com.apple.quarantine "$MAYLA_CLI" 2>/dev/null || true
+        xattr -d com.apple.quarantine "$MAYLA_DAEMON" 2>/dev/null || true
+    fi
+
     echo "$version" > "$VERSION_FILE"
 }
 

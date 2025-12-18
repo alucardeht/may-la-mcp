@@ -50,11 +50,32 @@ func startDaemon(cfg *config.Config) error {
 		return err
 	}
 
-	cmd := exec.Command("mayla-daemon")
+	daemonPath, err := exec.LookPath("mayla-daemon")
+	if err != nil {
+		return fmt.Errorf("mayla-daemon not found in PATH: %w", err)
+	}
+
+	cmd := exec.Command(daemonPath)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start daemon: %w", err)
+	}
+
+	maxRetries := 10
+	for i := 0; i < maxRetries; i++ {
+		waitTime := time.Duration(100*(i+1)) * time.Millisecond
+		time.Sleep(waitTime)
+
+		if _, err := os.Stat(cfg.SocketPath); err == nil {
+			time.Sleep(100 * time.Millisecond)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("daemon started but socket not created within %v seconds",
+		time.Duration(100*(maxRetries*(maxRetries+1))/2)*time.Millisecond/time.Second)
 }
 
 func handleStdio(client *daemon.Client) error {
