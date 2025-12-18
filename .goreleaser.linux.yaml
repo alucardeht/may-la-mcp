@@ -1,0 +1,57 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: mayla-linux
+    main: ./cmd/mayla
+    binary: mayla
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=1
+    flags:
+      - -tags=sqlite_fts5
+    ldflags:
+      - -s -w
+
+  - id: mayla-daemon-linux
+    main: ./cmd/mayla-daemon
+    binary: mayla-daemon
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=1
+    flags:
+      - -tags=sqlite_fts5
+    ldflags:
+      - -s -w
+
+archives:
+  - id: linux
+    builds:
+      - mayla-linux
+      - mayla-daemon-linux
+    format: binary
+    name_template: "{{ .Binary }}-{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
