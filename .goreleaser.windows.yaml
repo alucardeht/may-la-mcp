@@ -12,7 +12,6 @@ builds:
       - windows
     goarch:
       - amd64
-      - arm64
     env:
       - CGO_ENABLED=1
     flags:
@@ -27,7 +26,6 @@ builds:
       - windows
     goarch:
       - amd64
-      - arm64
     env:
       - CGO_ENABLED=1
     flags:
