@@ -10,3 +10,6 @@ bin/
 dist/
 *.log
 coverage.txt
+CLAUDE-GLOBAL.md
+CLAUDE.md
+CLAUDE-PROJECT.md

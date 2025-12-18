@@ -56,7 +56,11 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 
 ## 🛠 Installation
 
-May-la auto-installs with a single command:
+May-la works with any MCP-compatible IDE. Choose your IDE below:
+
+### For Claude Code
+
+**One-line installation:**
 
 **macOS / Linux:**
 ```bash
@@ -68,31 +72,58 @@ claude mcp add may-la -s user -- bash -c 'SCRIPT=$(mktemp); curl -sL https://raw
 claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -Command "$script = [System.IO.Path]::GetTempFileName(); irm https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1 -OutFile $script; & $script; Remove-Item $script"
 ```
 
-That's it! Restart Claude Code and May-la will be available.
+After installation:
+1. Restart Claude Code: `/quit` then restart
+2. Verify installation (see Validation section below)
 
-> **Note on `-s user` flag:** The `-s user` flag installs May-la globally for all projects in your workspace. This means you'll have access to May-la across all your Claude Code projects, not just the current one.
+### For Cursor
 
-### What happens behind the scenes
+**Step 1: Install binaries**
 
-1. Claude runs the launcher script
-2. Launcher checks for the latest release on GitHub
+Run the same installation command as Claude Code above (it downloads the binaries to `~/.mayla/`).
+
+**Step 2: Configure Cursor**
+
+Add to your Cursor settings (`~/.cursor/mcp.json` or via Settings → MCP):
+
+```json
+{
+  "mcpServers": {
+    "may-la": {
+      "command": "~/.mayla/mayla",
+      "args": []
+    }
+  }
+}
+```
+
+**Step 3: Restart Cursor**
+
+Restart Cursor to load the MCP server.
+
+> **Note**: The `-s user` flag installs May-la globally for all projects. Binaries are downloaded to `~/.mayla/` and work with any MCP-compatible IDE.
+
+### What Happens During Installation
+
+1. Launcher script downloads from GitHub
+2. Detects your platform (OS + architecture)
 3. Downloads **both** pre-compiled binaries for your platform:
-   - `mayla` (CLI client) - ~9MB
-   - `mayla-daemon` (background server) - ~10MB
-4. Stores them in `~/.mayla/` (or `%USERPROFILE%\.mayla\` on Windows)
-5. Auto-updates when new versions are released
-6. Executes `mayla` CLI which connects to daemon via Unix socket
+   - `mayla` (CLI client) - ~6-7MB
+   - `mayla-daemon` (background server) - ~6-8MB
+4. Stores in `~/.mayla/` directory (or `%USERPROFILE%\.mayla\` on Windows)
+5. For macOS: Removes quarantine attributes to prevent Gatekeeper blocks
+6. Auto-updates when new versions are released
 
 ### Supported Platforms
 
-| OS | Architecture | Status |
-|----|--------------|--------|
-| macOS | arm64 (Apple Silicon) | ✅ |
-| macOS | amd64 (Intel) | ✅ |
-| Linux | amd64 | ✅ |
-| Linux | arm64 | ✅ |
-| Windows | amd64 | ✅ |
-| Windows | arm64 | ✅ |
+| OS | Architecture | Status | Binary Size | Notes |
+|----|--------------|--------|-------------|-------|
+| **macOS** | Apple Silicon (arm64) | ✅ Full CGO | ~6-7 MB | SQLite FTS5 enabled |
+| **macOS** | Intel (amd64) | ✅ Full CGO | ~6-7 MB | SQLite FTS5 enabled |
+| **Linux** | amd64 | ✅ Full CGO | ~6-7 MB | SQLite FTS5 enabled |
+| **Windows** | amd64 | ✅ Full CGO | ~6-7 MB | SQLite FTS5 enabled |
+
+> **Note**: ARM64 builds for Linux/Windows are not provided due to CGO cross-compilation complexity. Native compilation on those platforms would require specialized toolchains.
 
 ### Build from Source (Optional)
 
@@ -105,6 +136,86 @@ make build-all
 ```
 
 Requirements: Go 1.22+
+
+## ✅ Validation
+
+**How to verify May-la is working correctly:**
+
+### Quick Test
+
+In Claude Code or Cursor, try any of these MCP tools:
+
+```
+Use may-la to list files in current directory
+```
+
+or
+
+```
+Use may-la to read README.md
+```
+
+### Detailed Verification
+
+**Step 1: Check binaries are installed**
+```bash
+ls -lh ~/.mayla/
+```
+
+Expected output:
+```
+-rwxr-xr-x  mayla          (~6-7 MB)
+-rwxr-xr-x  mayla-daemon   (~6-8 MB)
+```
+
+**Step 2: Test CLI directly**
+```bash
+~/.mayla/mayla --version
+```
+
+Expected output:
+```
+mayla version X.X.X
+```
+
+**Step 3: Check daemon can start**
+```bash
+~/.mayla/mayla-daemon --version
+```
+
+Expected output:
+```
+mayla-daemon version X.X.X
+```
+
+**Step 4: Test MCP connection**
+
+In Claude Code:
+```
+/mcp list
+```
+
+You should see `may-la` in the list of available servers.
+
+### Common Issues
+
+**"Failed to connect to daemon"**
+- Daemon may not have started properly
+- Check: `ps aux | grep mayla-daemon`
+- Solution: Restart your IDE
+
+**"Command not found: mayla"**
+- Binaries not in expected location
+- Check: `ls -la ~/.mayla/`
+- Solution: Re-run installation command
+
+**macOS: "Cannot be opened because the developer cannot be verified"**
+- Quarantine attributes not removed properly
+- Solution: `xattr -d com.apple.quarantine ~/.mayla/mayla ~/.mayla/mayla-daemon`
+
+**Windows: "Access Denied"**
+- Antivirus blocking execution
+- Solution: Add `%USERPROFILE%\.mayla\` to antivirus exclusions
 
 ## 📖 Quick Start
 
@@ -349,38 +460,61 @@ Contributions welcome! Please:
 
 ## 🐛 Troubleshooting
 
-### Daemon Won't Start
+### Installation Issues
 
+**Binaries not downloading**
+- Check internet connection
+- Verify GitHub is accessible: `curl -I https://github.com`
+- Check firewall/proxy settings
+
+**Permission denied on Linux/macOS**
+- Ensure binaries are executable: `chmod +x ~/.mayla/*`
+- Check directory permissions: `ls -ld ~/.mayla`
+
+### Runtime Issues
+
+**"Socket not found" error**
+- Daemon not running: Start manually `~/.mayla/mayla-daemon &`
+- Socket path issue: Check `~/.mayla/config.yaml` for correct socket path
+- On restart, old socket may exist: `rm ~/.mayla/daemon.sock`
+
+**High memory usage**
+- Normal: May-la uses <50MB base, <100MB under load
+- If >200MB: Check for memory leaks, report issue with `ps aux | grep mayla`
+
+**SQLite/FTS5 errors**
+- Verify CGO is enabled: `strings ~/.mayla/mayla | grep sqlite`
+- Should show SQLite symbols if CGO compiled correctly
+- If not: Re-download with installation command (may be old version)
+
+### Platform-Specific
+
+**macOS: Quarantine issues**
 ```bash
-# Check if socket exists
-ls -la /tmp/mayla.sock
-
-# Remove stale socket
-rm /tmp/mayla.sock
-
-# Start with debug logging
-mayla-daemon --log-level debug
+# Remove quarantine from both binaries
+xattr -d com.apple.quarantine ~/.mayla/mayla
+xattr -d com.apple.quarantine ~/.mayla/mayla-daemon
 ```
 
-### Performance Issues
+**Linux: Missing dependencies**
+- CGO requires standard C libraries
+- Install: `sudo apt-get install libc6-dev` (Debian/Ubuntu)
+- Install: `sudo yum install glibc-devel` (RHEL/CentOS)
 
-```bash
-# Profile memory usage
-mayla-daemon --profile memory
+**Windows: Antivirus false positives**
+- Add exclusion: `%USERPROFILE%\.mayla\`
+- Binaries are signed and safe (check GitHub Actions build logs)
 
-# Check running processes
-ps aux | grep mayla
-```
+### Getting Help
 
-### Search Not Finding Files
-
-```bash
-# Verify ripgrep installation
-which rg
-
-# Check exclusion patterns in config
-mayla health
-```
+If problems persist:
+1. Check [existing issues](https://github.com/alucardeht/may-la-mcp/issues)
+2. Include in your report:
+   - OS and architecture (`uname -a` on macOS/Linux, `systeminfo` on Windows)
+   - Output of `~/.mayla/mayla --version`
+   - Output of `~/.mayla/mayla-daemon --version`
+   - Error messages from IDE console
+3. Open new issue with details
 
 ## 📞 Support
 
