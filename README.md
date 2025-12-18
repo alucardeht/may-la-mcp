@@ -56,18 +56,16 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 
 ## 🛠 Installation
 
-### Quick Install (Recommended)
-
-May-la auto-installs and auto-updates. Just add it to Claude Code:
+May-la auto-installs with a single command:
 
 **macOS / Linux:**
 ```bash
-claude mcp add may-la -s user -- bash -c "curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh | bash"
+claude mcp add may-la -s user -- bash -c 'SCRIPT=$(mktemp); curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh > "$SCRIPT"; bash "$SCRIPT"; rm "$SCRIPT"'
 ```
 
 **Windows (PowerShell):**
 ```powershell
-claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1 | iex"
+claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -Command "$script = [System.IO.Path]::GetTempFileName(); irm https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1 -OutFile $script; & $script; Remove-Item $script"
 ```
 
 That's it! Restart Claude Code and May-la will be available.
@@ -78,9 +76,12 @@ That's it! Restart Claude Code and May-la will be available.
 
 1. Claude runs the launcher script
 2. Launcher checks for the latest release on GitHub
-3. Downloads the pre-compiled binary for your platform (~10MB)
-4. Stores it in `~/.mayla/` (or `%USERPROFILE%\.mayla\` on Windows)
+3. Downloads **both** pre-compiled binaries for your platform:
+   - `mayla` (CLI client) - ~9MB
+   - `mayla-daemon` (background server) - ~10MB
+4. Stores them in `~/.mayla/` (or `%USERPROFILE%\.mayla\` on Windows)
 5. Auto-updates when new versions are released
+6. Executes `mayla` CLI which connects to daemon via Unix socket
 
 ### Supported Platforms
 
@@ -100,7 +101,7 @@ If you prefer to build yourself:
 ```bash
 git clone https://github.com/alucardeht/may-la-mcp.git
 cd may-la-mcp
-go build -o mayla-daemon ./cmd/mayla-daemon
+make build-all
 ```
 
 Requirements: Go 1.22+
