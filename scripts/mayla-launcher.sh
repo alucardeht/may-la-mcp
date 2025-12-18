@@ -3,7 +3,8 @@ set -e
 
 REPO="alucardeht/may-la-mcp"
 INSTALL_DIR="$HOME/.mayla"
-BINARY="$INSTALL_DIR/mayla-daemon"
+MAYLA_CLI="$INSTALL_DIR/mayla"
+MAYLA_DAEMON="$INSTALL_DIR/mayla-daemon"
 VERSION_FILE="$INSTALL_DIR/version"
 
 mkdir -p "$INSTALL_DIR"
@@ -27,10 +28,15 @@ get_platform() {
 download_binary() {
     local version=$1
     local platform=$(get_platform)
-    local url="https://github.com/$REPO/releases/download/$version/mayla-daemon-$platform"
 
-    echo "Downloading May-la $version for $platform..." >&2
-    curl -sL "$url" -o "$BINARY.tmp" && mv "$BINARY.tmp" "$BINARY" && chmod +x "$BINARY"
+    local mayla_url="https://github.com/$REPO/releases/download/$version/mayla-$platform"
+    echo "Downloading mayla $version for $platform..." >&2
+    curl -sL "$mayla_url" -o "$MAYLA_CLI.tmp" && mv "$MAYLA_CLI.tmp" "$MAYLA_CLI" && chmod +x "$MAYLA_CLI"
+
+    local daemon_url="https://github.com/$REPO/releases/download/$version/mayla-daemon-$platform"
+    echo "Downloading mayla-daemon $version for $platform..." >&2
+    curl -sL "$daemon_url" -o "$MAYLA_DAEMON.tmp" && mv "$MAYLA_DAEMON.tmp" "$MAYLA_DAEMON" && chmod +x "$MAYLA_DAEMON"
+
     echo "$version" > "$VERSION_FILE"
 }
 
@@ -41,15 +47,15 @@ check_and_update() {
     [ -f "$VERSION_FILE" ] && current=$(cat "$VERSION_FILE")
 
     if [ -z "$latest" ]; then
-        [ -f "$BINARY" ] && return 0
-        echo "Error: Cannot fetch latest version and no local binary found" >&2
+        [ -f "$MAYLA_CLI" ] && [ -f "$MAYLA_DAEMON" ] && return 0
+        echo "Error: Cannot fetch latest version and binaries not found" >&2
         exit 1
     fi
 
-    if [ "$latest" != "$current" ] || [ ! -f "$BINARY" ]; then
+    if [ "$latest" != "$current" ] || [ ! -f "$MAYLA_CLI" ] || [ ! -f "$MAYLA_DAEMON" ]; then
         download_binary "$latest"
     fi
 }
 
 check_and_update
-exec "$BINARY" "$@"
+exec "$MAYLA_CLI" "$@"

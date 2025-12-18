@@ -56,31 +56,37 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 
 ## 🛠 Installation
 
-### Quick Install (Recommended)
-
-May-la auto-installs and auto-updates. Just add it to Claude Code:
+May-la auto-installs with a single command:
 
 **macOS / Linux:**
 ```bash
-claude mcp add may-la -s user -- bash -c "curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh | bash"
+claude mcp add may-la -s user -- bash -c "curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/install.sh | bash"
 ```
 
 **Windows (PowerShell):**
 ```powershell
-claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1 | iex"
+claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/install.ps1 | iex"
 ```
 
 That's it! Restart Claude Code and May-la will be available.
 
-> **Note on `-s user` flag:** The `-s user` flag installs May-la globally for all projects in your workspace. This means you'll have access to May-la across all your Claude Code projects, not just the current one.
+> **Note:** The installation script automatically clones the repository, builds both binaries (`mayla` and `mayla-daemon`), installs them to `~/.mayla/`, and cleans up temporary files.
 
 ### What happens behind the scenes
 
-1. Claude runs the launcher script
-2. Launcher checks for the latest release on GitHub
-3. Downloads the pre-compiled binary for your platform (~10MB)
-4. Stores it in `~/.mayla/` (or `%USERPROFILE%\.mayla\` on Windows)
-5. Auto-updates when new versions are released
+1. **Download:** Installation script is fetched from GitHub
+2. **Clone:** Repository is cloned to a temporary directory
+3. **Build:** Both `mayla` (CLI) and `mayla-daemon` (server) are compiled
+4. **Install:** Binaries are copied to `~/.mayla/`
+5. **Cleanup:** Temporary files are removed
+6. **Execute:** `mayla` CLI starts and connects to daemon via Unix socket
+
+### Requirements
+
+- **Go 1.22+** (for building binaries during installation)
+- **Claude Code** installed
+- **git** installed
+- Internet connection
 
 ### Supported Platforms
 
@@ -90,20 +96,20 @@ That's it! Restart Claude Code and May-la will be available.
 | macOS | amd64 (Intel) | ✅ |
 | Linux | amd64 | ✅ |
 | Linux | arm64 | ✅ |
-| Windows | amd64 | ✅ |
-| Windows | arm64 | ✅ |
+| Windows | amd64 | ⏳ Coming soon |
+| Windows | arm64 | ⏳ Coming soon |
 
-### Build from Source (Optional)
+### Manual Installation (Optional)
 
-If you prefer to build yourself:
+If you prefer to build from source manually:
 
 ```bash
 git clone https://github.com/alucardeht/may-la-mcp.git
 cd may-la-mcp
-go build -o mayla-daemon ./cmd/mayla-daemon
+make build-all
+sudo make install  # Copies to /usr/local/bin
+claude mcp add may-la -s user -- mayla
 ```
-
-Requirements: Go 1.22+
 
 ## 📖 Quick Start
 
