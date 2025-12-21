@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/alucardeht/may-la-mcp/internal/config"
@@ -50,9 +51,9 @@ func startDaemon(cfg *config.Config) error {
 		return err
 	}
 
-	daemonPath, err := exec.LookPath("mayla-daemon")
-	if err != nil {
-		return fmt.Errorf("mayla-daemon not found in PATH: %w", err)
+	daemonPath := filepath.Join(os.Getenv("HOME"), ".mayla", "mayla-daemon")
+	if _, err := os.Stat(daemonPath); err != nil {
+		return fmt.Errorf("mayla-daemon not found at %s: %w", daemonPath, err)
 	}
 
 	cmd := exec.Command(daemonPath)
