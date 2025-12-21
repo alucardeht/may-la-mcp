@@ -168,27 +168,7 @@ Expected output:
 -rwxr-xr-x  mayla-daemon   (~6-8 MB)
 ```
 
-**Step 2: Test CLI directly**
-```bash
-~/.mayla/mayla --version
-```
-
-Expected output:
-```
-mayla version X.X.X
-```
-
-**Step 3: Check daemon can start**
-```bash
-~/.mayla/mayla-daemon --version
-```
-
-Expected output:
-```
-mayla-daemon version X.X.X
-```
-
-**Step 4: Test MCP connection**
+**Step 2: Test MCP connection**
 
 In Claude Code:
 ```
@@ -511,8 +491,6 @@ If problems persist:
 1. Check [existing issues](https://github.com/alucardeht/may-la-mcp/issues)
 2. Include in your report:
    - OS and architecture (`uname -a` on macOS/Linux, `systeminfo` on Windows)
-   - Output of `~/.mayla/mayla --version`
-   - Output of `~/.mayla/mayla-daemon --version`
    - Error messages from IDE console
 3. Open new issue with details
 
