@@ -64,4 +64,10 @@ check_and_update() {
 }
 
 check_and_update
+
+if ! pgrep -f "mayla-daemon" > /dev/null 2>&1; then
+    "$MAYLA_DAEMON" &
+    sleep 1
+fi
+
 exec "$MAYLA_CLI" "$@"
