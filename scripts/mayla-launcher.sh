@@ -22,7 +22,7 @@ get_platform() {
         aarch64|arm64) arch="arm64" ;;
     esac
 
-    echo "${os}-${arch}"
+    echo "${os}_${arch}"
 }
 
 download_binary() {
