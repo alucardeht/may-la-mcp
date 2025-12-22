@@ -22,7 +22,7 @@ get_platform() {
         aarch64|arm64) arch="arm64" ;;
     esac
 
-    echo "${os}-${arch}"
+    echo "${os}_${arch}"
 }
 
 download_binary() {
@@ -64,4 +64,10 @@ check_and_update() {
 }
 
 check_and_update
+
+if ! pgrep -f "mayla-daemon" > /dev/null 2>&1; then
+    "$MAYLA_DAEMON" &
+    sleep 1
+fi
+
 exec "$MAYLA_CLI" "$@"

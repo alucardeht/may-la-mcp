@@ -86,22 +86,67 @@ Run the same installation command as Claude Code above (it downloads the binarie
 
 Add to your Cursor settings (`~/.cursor/mcp.json` or via Settings → MCP):
 
+> **Important**: The tilde (`~`) does not expand in JSON. Use the absolute path to your home directory instead.
+
+**macOS:**
 ```json
 {
   "mcpServers": {
     "may-la": {
-      "command": "~/.mayla/mayla",
+      "command": "/Users/YOUR_USERNAME/.mayla/mayla",
       "args": []
     }
   }
 }
 ```
 
+**Linux:**
+```json
+{
+  "mcpServers": {
+    "may-la": {
+      "command": "/home/YOUR_USERNAME/.mayla/mayla",
+      "args": []
+    }
+  }
+}
+```
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "may-la": {
+      "command": "C:\\Users\\YOUR_USERNAME\\.mayla\\mayla.exe",
+      "args": []
+    }
+  }
+}
+```
+
+Replace `YOUR_USERNAME` with your actual username.
+
 **Step 3: Restart Cursor**
 
 Restart Cursor to load the MCP server.
 
-> **Note**: The `-s user` flag installs May-la globally for all projects. Binaries are downloaded to `~/.mayla/` and work with any MCP-compatible IDE.
+### For Gemini CLI
+
+**One-liner installation:**
+
+**macOS / Linux:**
+```bash
+gemini mcp add may-la -s user -- bash -c 'SCRIPT=$(mktemp); curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh > "$SCRIPT"; bash "$SCRIPT"; rm "$SCRIPT"'
+```
+
+**Verify installation:**
+```bash
+gemini mcp list
+```
+
+You should see `may-la` in the list of configured MCP servers.
+
+> **Note**: The launcher script automatically downloads the binaries to `~/.mayla/` if they don't exist, and keeps them updated.
 
 ### What Happens During Installation
 
@@ -168,27 +213,7 @@ Expected output:
 -rwxr-xr-x  mayla-daemon   (~6-8 MB)
 ```
 
-**Step 2: Test CLI directly**
-```bash
-~/.mayla/mayla --version
-```
-
-Expected output:
-```
-mayla version X.X.X
-```
-
-**Step 3: Check daemon can start**
-```bash
-~/.mayla/mayla-daemon --version
-```
-
-Expected output:
-```
-mayla-daemon version X.X.X
-```
-
-**Step 4: Test MCP connection**
+**Step 2: Test MCP connection**
 
 In Claude Code:
 ```
@@ -511,8 +536,6 @@ If problems persist:
 1. Check [existing issues](https://github.com/alucardeht/may-la-mcp/issues)
 2. Include in your report:
    - OS and architecture (`uname -a` on macOS/Linux, `systeminfo` on Windows)
-   - Output of `~/.mayla/mayla --version`
-   - Output of `~/.mayla/mayla-daemon --version`
    - Error messages from IDE console
 3. Open new issue with details
 
