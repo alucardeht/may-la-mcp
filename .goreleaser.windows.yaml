@@ -42,7 +42,7 @@ archives:
     name_template: "{{ .Binary }}-{{ .Os }}_{{ .Arch }}"
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: 'checksums_windows.txt'
 
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
