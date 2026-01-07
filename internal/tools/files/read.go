@@ -50,12 +50,12 @@ func (t *ReadTool) Schema() json.RawMessage {
 			},
 			"limit": {
 				"type": "integer",
-				"description": "Maximum bytes to read (optional, 0 = no limit)",
+				"description": "Max bytes (0=unlimited)",
 				"minimum": 0
 			},
 			"encoding": {
 				"type": "string",
-				"description": "Expected encoding (optional: utf-8, utf-16, iso-8859-1, auto)",
+				"description": "Encoding (auto-detect if omitted)",
 				"enum": ["utf-8", "utf-16", "iso-8859-1", "auto"]
 			}
 		},

@@ -55,7 +55,7 @@ func (t *ReferencesTool) Schema() json.RawMessage {
 			},
 			"recursive": {
 				"type": "boolean",
-				"description": "Search recursively (default: true)"
+				"description": "Search subdirs"
 			},
 			"max_results": {
 				"type": "integer",

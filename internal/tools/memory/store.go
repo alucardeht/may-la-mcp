@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -12,6 +13,7 @@ import (
 
 type MemoryStore struct {
 	db *sql.DB
+	mu sync.RWMutex
 }
 
 func NewMemoryStore(dbPath string) (*MemoryStore, error) {
@@ -21,6 +23,10 @@ func NewMemoryStore(dbPath string) (*MemoryStore, error) {
 	}
 
 	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		return nil, err
 	}
 
@@ -67,6 +73,15 @@ func (s *MemoryStore) initSchema() error {
 }
 
 func (s *MemoryStore) Create(id, name, content string, category Category, tags []string) (*Memory, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var exists bool
+	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM memories WHERE name = ? AND deleted_at IS NULL)", name).Scan(&exists)
+	if err == nil && exists {
+		return nil, fmt.Errorf("memory with name '%s' already exists", name)
+	}
+
 	tagsJSON, err := json.Marshal(tags)
 	if err != nil {
 		return nil, err
@@ -116,6 +131,9 @@ func (s *MemoryStore) Create(id, name, content string, category Category, tags [
 }
 
 func (s *MemoryStore) Read(identifier string) (*Memory, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	row := s.db.QueryRow(
 		"SELECT id, name, content, category, tags, created_at, updated_at, accessed_at, access_count, deleted_at FROM memories WHERE (id = ? OR name = ?) AND deleted_at IS NULL",
 		identifier, identifier,
@@ -207,14 +225,42 @@ func (s *MemoryStore) Update(id, content string, tags []string) (*Memory, error)
 }
 
 func (s *MemoryStore) Delete(identifier string) (string, *time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	now := time.Now().UTC()
 
-	_, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", nil, err
+	}
+
+	result, err := tx.Exec(
 		"UPDATE memories SET deleted_at = ? WHERE (id = ? OR name = ?) AND deleted_at IS NULL",
 		now, identifier, identifier,
 	)
 
 	if err != nil {
+		tx.Rollback()
+		return "", nil, err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		tx.Rollback()
+		return "", nil, fmt.Errorf("memory '%s' not found", identifier)
+	}
+
+	_, err = tx.Exec(
+		"DELETE FROM memories_fts WHERE rowid IN (SELECT rowid FROM memories WHERE (id = ? OR name = ?) AND deleted_at IS NOT NULL)",
+		identifier, identifier,
+	)
+	if err != nil {
+		tx.Rollback()
+		return "", nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
 		return "", nil, err
 	}
 
@@ -222,6 +268,9 @@ func (s *MemoryStore) Delete(identifier string) (string, *time.Time, error) {
 }
 
 func (s *MemoryStore) List(category *Category, limit int) ([]*MemoryListItem, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	query := "SELECT id, name, category, content, created_at, accessed_at, access_count FROM memories WHERE deleted_at IS NULL"
 	var args []interface{}
 
@@ -263,6 +312,9 @@ func (s *MemoryStore) List(category *Category, limit int) ([]*MemoryListItem, er
 }
 
 func (s *MemoryStore) Search(query string, category *Category, limit int) ([]*SearchResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	sqlQuery := "SELECT m.id, m.name, m.category, m.content, m.created_at FROM memories m WHERE m.deleted_at IS NULL"
 	var args []interface{}
 

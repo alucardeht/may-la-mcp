@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"testing"
-	"time"
 )
 
 func TestSearchTool(t *testing.T) {

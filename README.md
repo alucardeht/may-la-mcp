@@ -21,7 +21,7 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 
 ## 📋 Features
 
-### 22 Production-Ready Tools Across 5 Categories
+### 17 Production-Ready Tools Across 4 Categories
 
 #### 📁 File Operations (7 tools)
 - **`read`** — Read files with intelligent chunking and progress tracking
@@ -37,12 +37,6 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 - **`find`** — Find files by pattern (glob/regex)
 - **`symbols`** — Extract code symbols using Tree-sitter (Go, Python, TypeScript, etc.)
 - **`references`** — Find symbol references across codebase
-
-#### 📐 Spec-Driven Development (4 tools)
-- **`spec_init`** — Initialize `.mayla/` structure for spec-driven workflows
-- **`spec_generate`** — Generate constitution, specification, plan, and task definitions
-- **`spec_validate`** — Validate spec consistency and completeness
-- **`spec_status`** — Track workflow progress and execution status
 
 #### 💾 Memory System (5 tools)
 - **`memory_write`** — Save long-term memory with auto-versioning
@@ -313,8 +307,6 @@ may-la-mcp/
 │       │   ├── ripgrep.go
 │       │   ├── symbols.go
 │       │   └── ...
-│       ├── spec/              # Spec-driven development
-│       │   └── ...
 │       └── memory/            # Memory system
 │           └── ...
 ├── tests/
@@ -359,7 +351,6 @@ Create `~/.mayla/config.yaml`:
 ```yaml
 socket: /tmp/mayla.sock
 memory_dir: ~/.mayla/memories
-spec_dir: .mayla
 log_level: info
 max_chunk_size: 10000
 search:
@@ -446,16 +437,7 @@ Provide Claude with fast, comprehensive code understanding:
 4. Read context with `read`
 ```
 
-### 2. Spec-Driven Development
-Build software following constitution and specifications:
-```
-1. Initialize spec with `spec_init`
-2. Generate spec artifacts with `spec_generate`
-3. Validate consistency with `spec_validate`
-4. Track progress with `spec_status`
-```
-
-### 3. Persistent Memory
+### 2. Persistent Memory
 Maintain long-term context across conversations:
 ```
 1. Save insights with `memory_write`

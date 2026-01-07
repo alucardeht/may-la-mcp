@@ -45,7 +45,7 @@ func (t *WriteTool) Schema() json.RawMessage {
 			},
 			"createDirs": {
 				"type": "boolean",
-				"description": "Create parent directories if they don't exist (default: false)"
+				"description": "Create parent dirs if needed"
 			},
 			"backup": {
 				"type": "boolean",

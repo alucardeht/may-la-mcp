@@ -39,7 +39,7 @@ func (t *DeleteTool) Schema() json.RawMessage {
 			},
 			"recursive": {
 				"type": "boolean",
-				"description": "Recursively delete directory contents (default: false)"
+				"description": "Delete contents recursively"
 			},
 			"force": {
 				"type": "boolean",

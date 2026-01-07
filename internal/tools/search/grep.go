@@ -58,7 +58,7 @@ func (t *SearchTool) Schema() json.RawMessage {
 			},
 			"recursive": {
 				"type": "boolean",
-				"description": "Search recursively in subdirectories (default: true)"
+				"description": "Search subdirs"
 			},
 			"case_sensitive": {
 				"type": "boolean",
@@ -70,7 +70,7 @@ func (t *SearchTool) Schema() json.RawMessage {
 			},
 			"context_lines": {
 				"type": "integer",
-				"description": "Number of context lines before/after match (default: 0)"
+				"description": "Context lines around match"
 			},
 			"max_results": {
 				"type": "integer",
