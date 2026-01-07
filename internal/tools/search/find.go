@@ -55,12 +55,12 @@ func (t *FindTool) Schema() json.RawMessage {
 			},
 			"type": {
 				"type": "string",
-				"description": "Filter by type: file, dir, all (default: all)",
+				"description": "Type filter",
 				"enum": ["file", "dir", "all"]
 			},
 			"max_depth": {
 				"type": "integer",
-				"description": "Maximum directory depth (0 = no limit, default: 0)"
+				"description": "Max depth (0=unlimited)"
 			},
 			"max_results": {
 				"type": "integer",

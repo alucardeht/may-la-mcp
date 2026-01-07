@@ -10,7 +10,6 @@ import (
 	"github.com/alucardeht/may-la-mcp/internal/tools/files"
 	"github.com/alucardeht/may-la-mcp/internal/tools/memory"
 	"github.com/alucardeht/may-la-mcp/internal/tools/search"
-	"github.com/alucardeht/may-la-mcp/internal/tools/spec"
 )
 
 func TestAllToolsE2E(t *testing.T) {
@@ -31,9 +30,6 @@ func TestAllToolsE2E(t *testing.T) {
 		for _, tool := range search.GetTools() {
 			registry.Register(tool)
 		}
-		for _, tool := range spec.GetTools() {
-			registry.Register(tool)
-		}
 
 		dbPath := filepath.Join(tmpDir, "test-memory.db")
 		memTools, err := memory.GetTools(dbPath)
@@ -45,7 +41,7 @@ func TestAllToolsE2E(t *testing.T) {
 		}
 
 		names := registry.Names()
-		expectedCount := 22
+		expectedCount := 18
 		if len(names) != expectedCount {
 			t.Errorf("Expected %d tools, got %d: %v", expectedCount, len(names), names)
 		}
@@ -213,55 +209,6 @@ func main() {
 		t.Logf("✅ References: %v", result)
 	})
 
-	t.Run("Spec_InitGenerateValidateStatus", func(t *testing.T) {
-		specDir := filepath.Join(tmpDir, "spec-test")
-		os.MkdirAll(specDir, 0755)
-
-		initTool := &spec.InitTool{}
-		input, _ := json.Marshal(map[string]interface{}{
-			"path": specDir,
-		})
-		result, err := initTool.Execute(input)
-		if err != nil {
-			t.Fatalf("Spec Init failed: %v", err)
-		}
-		t.Logf("✅ Spec Init: %v", result)
-
-		generateTool := &spec.GenerateTool{}
-		input, _ = json.Marshal(map[string]interface{}{
-			"path":     specDir,
-			"artifact": "constitution",
-			"content": map[string]interface{}{
-				"principles": []string{"Performance first", "Clean code"},
-			},
-		})
-		result, err = generateTool.Execute(input)
-		if err != nil {
-			t.Fatalf("Spec Generate failed: %v", err)
-		}
-		t.Logf("✅ Spec Generate: %v", result)
-
-		validateTool := &spec.ValidateTool{}
-		input, _ = json.Marshal(map[string]interface{}{
-			"path": specDir,
-		})
-		result, err = validateTool.Execute(input)
-		if err != nil {
-			t.Fatalf("Spec Validate failed: %v", err)
-		}
-		t.Logf("✅ Spec Validate: %v", result)
-
-		statusTool := &spec.StatusTool{}
-		input, _ = json.Marshal(map[string]interface{}{
-			"path": specDir,
-		})
-		result, err = statusTool.Execute(input)
-		if err != nil {
-			t.Fatalf("Spec Status failed: %v", err)
-		}
-		t.Logf("✅ Spec Status: %v", result)
-	})
-
 	t.Run("Memory_WriteReadListSearchDelete", func(t *testing.T) {
 		dbPath := filepath.Join(tmpDir, "memory-test.db")
 		memTools, err := memory.GetTools(dbPath)
@@ -382,22 +329,6 @@ func TestToolsIndividually(t *testing.T) {
 		})
 	}
 
-	specTools := spec.GetTools()
-	for _, tool := range specTools {
-		t.Run("Tool_"+tool.Name(), func(t *testing.T) {
-			if tool.Name() == "" {
-				t.Error("Tool name is empty")
-			}
-			if tool.Description() == "" {
-				t.Error("Tool description is empty")
-			}
-			if len(tool.Schema()) == 0 {
-				t.Error("Tool schema is empty")
-			}
-			t.Logf("✅ %s validated", tool.Name())
-		})
-	}
-
 	dbPath := filepath.Join(tmpDir, "validate-memory.db")
 	memTools, _ := memory.GetTools(dbPath)
 	for _, tool := range memTools {
@@ -472,31 +403,17 @@ func TestErrorScenarios(t *testing.T) {
 			t.Logf("✅ MemoryReadNonexistent: correctly returned error")
 		}
 	})
-
-	t.Run("Spec_InitInvalidPath", func(t *testing.T) {
-		initTool := &spec.InitTool{}
-		input, _ := json.Marshal(map[string]interface{}{
-			"path": "/invalid/path/that/does/not/exist",
-		})
-		_, err := initTool.Execute(input)
-		if err == nil {
-			t.Error("Expected error with invalid path")
-		}
-		t.Logf("✅ SpecInitInvalidPath: correctly returned error")
-	})
 }
 
 func TestToolMetadata(t *testing.T) {
 	t.Run("AllTools_HaveValidMetadata", func(t *testing.T) {
 		fileTools := files.GetTools()
 		searchTools := search.GetTools()
-		specTools := spec.GetTools()
 		healthTool := tools.NewHealthTool()
 
 		allTools := make([]tools.Tool, 0)
 		allTools = append(allTools, fileTools...)
 		allTools = append(allTools, searchTools...)
-		allTools = append(allTools, specTools...)
 		allTools = append(allTools, healthTool)
 
 		for _, tool := range allTools {

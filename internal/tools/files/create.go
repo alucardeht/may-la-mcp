@@ -51,7 +51,7 @@ func (t *CreateTool) Schema() json.RawMessage {
 			},
 			"mode": {
 				"type": "string",
-				"description": "File permissions in octal (default: 0644 for files, 0755 for dirs)"
+				"description": "Octal permissions (default: 0644)"
 			},
 			"force": {
 				"type": "boolean",

@@ -50,7 +50,6 @@ func (t *SymbolsTool) Schema() json.RawMessage {
 			},
 			"kinds": {
 				"type": "array",
-				"description": "Filter by symbol kinds",
 				"items": {
 					"type": "string",
 					"enum": ["function", "class", "method", "variable", "interface", "type", "const"]

@@ -16,7 +16,6 @@ import (
 	"github.com/alucardeht/may-la-mcp/internal/tools/files"
 	"github.com/alucardeht/may-la-mcp/internal/tools/memory"
 	"github.com/alucardeht/may-la-mcp/internal/tools/search"
-	"github.com/alucardeht/may-la-mcp/internal/tools/spec"
 )
 
 type Daemon struct {
@@ -61,12 +60,6 @@ func (d *Daemon) registerAllTools() error {
 	for _, tool := range search.GetTools() {
 		if err := d.registry.Register(tool); err != nil {
 			return fmt.Errorf("search: %w", err)
-		}
-	}
-
-	for _, tool := range spec.GetTools() {
-		if err := d.registry.Register(tool); err != nil {
-			return fmt.Errorf("spec: %w", err)
 		}
 	}
 

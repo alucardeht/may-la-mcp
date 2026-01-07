@@ -61,11 +61,11 @@ func (t *ListTool) Schema() json.RawMessage {
 			},
 			"showHidden": {
 				"type": "boolean",
-				"description": "Show hidden files/dirs starting with . (default: false)"
+				"description": "Include hidden (dot) files"
 			},
 			"sortBy": {
 				"type": "string",
-				"description": "Sort by: name, size, date (default: name)",
+				"description": "Sort field",
 				"enum": ["name", "size", "date"]
 			}
 		},
