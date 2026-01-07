@@ -35,6 +35,9 @@ func NewMemoryStore(dbPath string) (*MemoryStore, error) {
 		return nil, err
 	}
 
+	_, _ = db.Exec(`DELETE FROM memories_fts WHERE name IN (SELECT name FROM memories WHERE deleted_at IS NOT NULL)`)
+	_, _ = db.Exec(`DELETE FROM memories WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-1 day')`)
+
 	return store, nil
 }
 
@@ -234,30 +237,21 @@ func (s *MemoryStore) Delete(identifier string) (string, *time.Time, error) {
 	if err != nil {
 		return "", nil, err
 	}
+	defer tx.Rollback()
 
-	result, err := tx.Exec(
-		"UPDATE memories SET deleted_at = ? WHERE (id = ? OR name = ?) AND deleted_at IS NULL",
-		now, identifier, identifier,
-	)
-
+	_, err = tx.Exec(`DELETE FROM memories_fts WHERE name = ? OR rowid IN (SELECT rowid FROM memories WHERE id = ?)`, identifier, identifier)
 	if err != nil {
-		tx.Rollback()
+		return "", nil, err
+	}
+
+	result, err := tx.Exec(`DELETE FROM memories WHERE (id = ? OR name = ?)`, identifier, identifier)
+	if err != nil {
 		return "", nil, err
 	}
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		tx.Rollback()
 		return "", nil, fmt.Errorf("memory '%s' not found", identifier)
-	}
-
-	_, err = tx.Exec(
-		"DELETE FROM memories_fts WHERE rowid IN (SELECT rowid FROM memories WHERE (id = ? OR name = ?) AND deleted_at IS NOT NULL)",
-		identifier, identifier,
-	)
-	if err != nil {
-		tx.Rollback()
-		return "", nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
