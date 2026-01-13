@@ -97,7 +97,6 @@ func (d *Daemon) Start() error {
 	}
 
 	go d.acceptConnections()
-	d.handleSignals()
 
 	return nil
 }
