@@ -3,33 +3,16 @@ package main
 import (
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
-	"time"
 
 	"github.com/alucardeht/may-la-mcp/internal/config"
 	"github.com/alucardeht/may-la-mcp/internal/daemon"
 )
-
-func isDaemonAlreadyRunning(socketPath string) bool {
-	conn, err := net.DialTimeout("unix", socketPath, 500*time.Millisecond)
-	if err != nil {
-		return false
-	}
-	defer conn.Close()
-	return true
-}
-
-func cleanupStaleDaemonFiles(socketPath string) {
-	if _, err := os.Stat(socketPath); err == nil {
-		if !isDaemonAlreadyRunning(socketPath) {
-			os.Remove(socketPath)
-		}
-	}
-}
 
 func main() {
 	cfg := config.Load()
@@ -37,12 +20,21 @@ func main() {
 		log.Fatalf("Failed to ensure directories: %v", err)
 	}
 
-	if isDaemonAlreadyRunning(cfg.SocketPath) {
+	pidPath := filepath.Join(filepath.Dir(cfg.SocketPath), "daemon.pid")
+
+	if isAlreadyRunning(pidPath) {
 		fmt.Println("Daemon already running")
 		os.Exit(0)
 	}
 
-	cleanupStaleDaemonFiles(cfg.SocketPath)
+	if err := writePIDFile(pidPath); err != nil {
+		log.Fatalf("Failed to write PID file: %v", err)
+	}
+	defer os.Remove(pidPath)
+
+	if _, err := os.Stat(cfg.SocketPath); err == nil {
+		os.Remove(cfg.SocketPath)
+	}
 
 	d, err := daemon.NewDaemon(cfg.SocketPath)
 	if err != nil {
@@ -53,11 +45,43 @@ func main() {
 		log.Fatalf("Failed to start daemon: %v", err)
 	}
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	handleSignals(d)
+}
 
-	<-sigChan
-	log.Println("Shutting down daemon...")
+func isAlreadyRunning(pidPath string) bool {
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		return false
+	}
 
+	pidStr := strings.TrimSpace(string(data))
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		os.Remove(pidPath)
+		return false
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		os.Remove(pidPath)
+		return false
+	}
+
+	if err := process.Signal(syscall.Signal(0)); err != nil {
+		os.Remove(pidPath)
+		return false
+	}
+
+	return true
+}
+
+func writePIDFile(pidPath string) error {
+	return os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0644)
+}
+
+func handleSignals(d *daemon.Daemon) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
 	d.Shutdown()
 }
