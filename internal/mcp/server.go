@@ -49,9 +49,15 @@ func (s *Server) ProcessStream(reader io.Reader, writer io.Writer) error {
 			continue
 		}
 
+		if req.ID == nil {
+			continue
+		}
+
 		resp := s.HandleRequest(&req)
-		if err := encoder.Encode(resp); err != nil {
-			return err
+		if resp != nil {
+			if err := encoder.Encode(resp); err != nil {
+				return err
+			}
 		}
 	}
 

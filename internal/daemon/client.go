@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 )
@@ -29,6 +30,8 @@ func (c *Client) SendRequest(req *protocol.JSONRPCRequest) (*protocol.JSONRPCRes
 	if _, err := c.conn.Write(data); err != nil {
 		return nil, err
 	}
+
+	c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 	decoder := json.NewDecoder(c.conn)
 	var resp protocol.JSONRPCResponse

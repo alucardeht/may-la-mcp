@@ -22,6 +22,10 @@ func NewHandler(registry *tools.Registry) *Handler {
 }
 
 func (h *Handler) Handle(req *Request) *Response {
+	if req.ID == nil {
+		return nil
+	}
+
 	resp := &Response{
 		JSONRPC: "2.0",
 		ID:      req.ID,
