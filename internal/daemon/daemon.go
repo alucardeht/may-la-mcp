@@ -101,7 +101,7 @@ func (d *Daemon) Start() error {
 	}
 
 	go d.acceptConnections()
-	d.handleSignals()
+	go d.handleSignals()
 
 	return nil
 }
