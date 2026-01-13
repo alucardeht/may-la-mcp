@@ -46,8 +46,53 @@ func connectToDaemon(socketPath string) (net.Conn, error) {
 	return connector.Connect()
 }
 
+type DaemonStatus struct {
+	Running bool
+	PID     int
+}
+
+func isDaemonAlreadyRunning(socketPath string) (*DaemonStatus, error) {
+	_, err := os.Stat(socketPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &DaemonStatus{Running: false}, nil
+		}
+		return nil, fmt.Errorf("failed to check socket: %w", err)
+	}
+
+	connector := daemon.NewSocketConnector(socketPath)
+	conn, err := connector.Connect()
+	if err != nil {
+		return &DaemonStatus{Running: false}, nil
+	}
+	defer conn.Close()
+
+	return &DaemonStatus{Running: true}, nil
+}
+
+func cleanupStaleDaemonFiles(socketPath string) error {
+	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove stale socket: %w", err)
+	}
+	return nil
+}
+
 func startDaemon(cfg *config.Config) error {
 	if err := cfg.EnsureDirectories(); err != nil {
+		return err
+	}
+
+	status, err := isDaemonAlreadyRunning(cfg.SocketPath)
+	if err != nil {
+		return err
+	}
+
+	if status.Running {
+		log.Println("Daemon already running")
+		return nil
+	}
+
+	if err := cleanupStaleDaemonFiles(cfg.SocketPath); err != nil {
 		return err
 	}
 
@@ -75,8 +120,8 @@ func startDaemon(cfg *config.Config) error {
 		}
 	}
 
-	return fmt.Errorf("daemon started but socket not created within %v seconds",
-		time.Duration(100*(maxRetries*(maxRetries+1))/2)*time.Millisecond/time.Second)
+	totalMs := 100 * (maxRetries * (maxRetries + 1)) / 2
+	return fmt.Errorf("daemon started but socket not created within %.1f seconds", float64(totalMs)/1000)
 }
 
 func handleStdio(client *daemon.Client) error {
