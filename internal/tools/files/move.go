@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type MoveRequest struct {
@@ -111,4 +113,12 @@ func (t *MoveTool) Execute(input json.RawMessage) (interface{}, error) {
 		Type:        itemType,
 		Size:        newStat.Size(),
 	}, nil
+}
+
+func (t *MoveTool) Title() string {
+	return "Move or Rename File"
+}
+
+func (t *MoveTool) Annotations() map[string]bool {
+	return tools.NonIdempotentWriteAnnotations()
 }

@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![MCP Protocol](https://img.shields.io/badge/MCP-v0.1-3178c6?style=flat-square)](https://spec.modelcontextprotocol.io)
+[![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-3178c6?style=flat-square)](https://spec.modelcontextprotocol.io)
 [![Performance](https://img.shields.io/badge/Cold%20Start-%3C%2050ms-brightgreen?style=flat-square)](docs/performance.md)
 
 **A high-performance MCP (Model Context Protocol) server written in Go**, engineered as a faster, more efficient alternative to SERENA MCP. Deliver powerful code navigation, file manipulation, and semantic search capabilities with lightning-fast response times.
@@ -47,6 +47,17 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 
 #### 🏥 System (1 tool)
 - **`health`** — Check daemon status and version
+
+### 🏷️ Tool Annotations
+
+All tools include MCP annotations for smarter client integration:
+
+| Annotation | Description |
+|------------|-------------|
+| `readOnlyHint` | Tool only reads data, no side effects |
+| `destructiveHint` | Tool can delete or permanently modify data |
+| `idempotentHint` | Tool can be safely retried with same result |
+| `openWorldHint` | Tool may return evolving/dynamic results |
 
 ## 🛠 Installation
 
@@ -380,7 +391,10 @@ search:
 
 ## 🔌 Protocol Details
 
-May-la implements the [Model Context Protocol v0.1](https://spec.modelcontextprotocol.io) with JSON-RPC 2.0 messaging over Unix sockets.
+May-la implements the [Model Context Protocol](https://spec.modelcontextprotocol.io) (2025-11-25) with:
+- **JSON-RPC 2.0 messaging** over Unix sockets
+- **JSON-RPC 2.0 notifications** — One-way messages (no response required)
+- **Tool annotations** — Semantic hints for client optimization
 
 ### Request Format
 

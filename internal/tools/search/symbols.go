@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type SymbolsRequest struct {
@@ -38,6 +40,14 @@ func (t *SymbolsTool) Name() string {
 
 func (t *SymbolsTool) Description() string {
 	return "Extract symbols from code files (functions, classes, methods, etc)"
+}
+
+func (t *SymbolsTool) Title() string {
+	return "Extract Code Symbols"
+}
+
+func (t *SymbolsTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
 }
 
 func (t *SymbolsTool) Schema() json.RawMessage {

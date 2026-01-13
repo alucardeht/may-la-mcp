@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type CreateRequest struct {
@@ -147,4 +149,12 @@ func parseMode(modeStr string) (os.FileMode, error) {
 		return 0, err
 	}
 	return mode, nil
+}
+
+func (t *CreateTool) Title() string {
+	return "Create File or Directory"
+}
+
+func (t *CreateTool) Annotations() map[string]bool {
+	return tools.NonIdempotentWriteAnnotations()
 }

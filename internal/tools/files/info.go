@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type InfoRequest struct {
@@ -118,4 +120,12 @@ func countDirContents(dirPath string) (int, int64) {
 	}
 
 	return count, totalSize
+}
+
+func (t *InfoTool) Title() string {
+	return "Get File Information"
+}
+
+func (t *InfoTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
 }

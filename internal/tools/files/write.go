@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type WriteRequest struct {
@@ -111,4 +113,12 @@ func (t *WriteTool) Execute(input json.RawMessage) (interface{}, error) {
 		Backup:  backupPath,
 		Created: !fileExists,
 	}, nil
+}
+
+func (t *WriteTool) Title() string {
+	return "Write File"
+}
+
+func (t *WriteTool) Annotations() map[string]bool {
+	return tools.SafeWriteAnnotations()
 }

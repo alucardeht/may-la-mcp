@@ -13,6 +13,12 @@ type Tool interface {
 	Execute(input json.RawMessage) (interface{}, error)
 }
 
+type AnnotatedTool interface {
+	Tool
+	Title() string
+	Annotations() map[string]bool
+}
+
 type Registry struct {
 	mu    sync.RWMutex
 	tools map[string]Tool

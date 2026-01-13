@@ -16,6 +16,14 @@ func (t *HealthTool) Description() string {
 	return "Check daemon health status"
 }
 
+func (t *HealthTool) Title() string {
+	return "Check Daemon Health"
+}
+
+func (t *HealthTool) Annotations() map[string]bool {
+	return ReadOnlyAnnotations()
+}
+
 func (t *HealthTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",

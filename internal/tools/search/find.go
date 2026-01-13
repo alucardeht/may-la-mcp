@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type FindRequest struct {
@@ -39,6 +41,14 @@ func (t *FindTool) Name() string {
 
 func (t *FindTool) Description() string {
 	return "Find files by name pattern with glob matching"
+}
+
+func (t *FindTool) Title() string {
+	return "Find Files by Pattern"
+}
+
+func (t *FindTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
 }
 
 func (t *FindTool) Schema() json.RawMessage {

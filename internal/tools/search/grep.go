@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type SearchRequest struct {
@@ -42,6 +44,14 @@ func (t *SearchTool) Name() string {
 
 func (t *SearchTool) Description() string {
 	return "Search for pattern in files with regex and context support"
+}
+
+func (t *SearchTool) Title() string {
+	return "Search File Contents"
+}
+
+func (t *SearchTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
 }
 
 func (t *SearchTool) Schema() json.RawMessage {

@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type ListRequest struct {
@@ -200,4 +202,12 @@ func sortFiles(files []FileInfo, sortBy string) {
 			return files[i].Name < files[j].Name
 		})
 	}
+}
+
+func (t *ListTool) Title() string {
+	return "List Directory Contents"
+}
+
+func (t *ListTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
 }
