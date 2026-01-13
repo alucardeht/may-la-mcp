@@ -81,6 +81,10 @@ func (d *Daemon) registerAllTools() error {
 }
 
 func (d *Daemon) Start() error {
+	if err := os.RemoveAll(d.socketPath); err != nil {
+		return fmt.Errorf("failed to remove socket: %w", err)
+	}
+
 	socketDir := filepath.Dir(d.socketPath)
 	if err := os.MkdirAll(socketDir, 0755); err != nil {
 		return fmt.Errorf("failed to create socket dir: %w", err)
@@ -97,6 +101,7 @@ func (d *Daemon) Start() error {
 	}
 
 	go d.acceptConnections()
+	d.handleSignals()
 
 	return nil
 }
