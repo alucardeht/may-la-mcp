@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type DeleteRequest struct {
@@ -97,4 +99,12 @@ func (t *DeleteTool) Execute(input json.RawMessage) (interface{}, error) {
 		Type:    itemType,
 		Size:    size,
 	}, nil
+}
+
+func (t *DeleteTool) Title() string {
+	return "Delete File or Directory"
+}
+
+func (t *DeleteTool) Annotations() map[string]bool {
+	return tools.DestructiveAnnotations()
 }

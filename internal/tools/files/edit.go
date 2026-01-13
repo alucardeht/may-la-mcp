@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type EditOperation struct {
@@ -162,4 +164,12 @@ func (t *EditTool) Execute(input json.RawMessage) (interface{}, error) {
 		Lines:     finalLines,
 		EditsApplied: appliedCount,
 	}, nil
+}
+
+func (t *EditTool) Title() string {
+	return "Edit File"
+}
+
+func (t *EditTool) Annotations() map[string]bool {
+	return tools.SafeWriteAnnotations()
 }

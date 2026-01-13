@@ -54,7 +54,7 @@ func (h *Handler) Handle(req *Request) *Response {
 
 func (h *Handler) handleInitialize() interface{} {
 	return map[string]interface{}{
-		"protocolVersion": "2024-11-05",
+		"protocolVersion": "2025-11-25",
 		"capabilities": map[string]interface{}{
 			"tools": map[string]interface{}{},
 		},
@@ -75,11 +75,22 @@ func (h *Handler) handleListTools() interface{} {
 			schema = json.RawMessage(t.Schema())
 		}
 
-		toolsData[i] = map[string]interface{}{
+		toolData := map[string]interface{}{
 			"name":        t.Name(),
 			"description": t.Description(),
 			"inputSchema": schema,
 		}
+
+		if annotated, ok := t.(tools.AnnotatedTool); ok {
+			if title := annotated.Title(); title != "" {
+				toolData["title"] = title
+			}
+			if annotations := annotated.Annotations(); annotations != nil {
+				toolData["annotations"] = annotations
+			}
+		}
+
+		toolsData[i] = toolData
 	}
 
 	return map[string]interface{}{

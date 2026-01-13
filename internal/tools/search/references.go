@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 type ReferencesRequest struct {
@@ -39,6 +41,14 @@ func (t *ReferencesTool) Name() string {
 
 func (t *ReferencesTool) Description() string {
 	return "Find references to a symbol with word boundary matching"
+}
+
+func (t *ReferencesTool) Title() string {
+	return "Find Symbol References"
+}
+
+func (t *ReferencesTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
 }
 
 func (t *ReferencesTool) Schema() json.RawMessage {

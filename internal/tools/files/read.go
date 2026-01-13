@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
 const maxMmapSize = 1024 * 1024
@@ -209,4 +211,12 @@ func decodeUTF16BE(data []byte) string {
 		result = append(result, r)
 	}
 	return string(result)
+}
+
+func (t *ReadTool) Title() string {
+	return "Read File"
+}
+
+func (t *ReadTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
 }

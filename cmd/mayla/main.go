@@ -94,22 +94,26 @@ func handleStdio(client *daemon.Client) error {
 
 		resp, err := client.SendRequest(&req)
 		if err != nil {
-			errResp := &protocol.JSONRPCResponse{
-				JSONRPC: "2.0",
-				ID:      req.ID,
-				Error: &protocol.JSONRPCError{
-					Code:    -32603,
-					Message: err.Error(),
-				},
-			}
-			if err := encoder.Encode(errResp); err != nil {
-				return err
+			if req.ID != nil {
+				errResp := &protocol.JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Error: &protocol.JSONRPCError{
+						Code:    -32603,
+						Message: err.Error(),
+					},
+				}
+				if err := encoder.Encode(errResp); err != nil {
+					return err
+				}
 			}
 			continue
 		}
 
-		if err := encoder.Encode(resp); err != nil {
-			return err
+		if req.ID != nil {
+			if err := encoder.Encode(resp); err != nil {
+				return err
+			}
 		}
 	}
 

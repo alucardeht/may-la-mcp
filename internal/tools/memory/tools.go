@@ -40,6 +40,14 @@ func (t *MemoryWriteTool) Description() string {
 	return "Write content to persistent memory"
 }
 
+func (t *MemoryWriteTool) Title() string {
+	return "Write to Memory"
+}
+
+func (t *MemoryWriteTool) Annotations() map[string]bool {
+	return tools.SafeWriteAnnotations()
+}
+
 func (t *MemoryWriteTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
@@ -125,6 +133,14 @@ func (t *MemoryReadTool) Description() string {
 	return "Read content from persistent memory"
 }
 
+func (t *MemoryReadTool) Title() string {
+	return "Read from Memory"
+}
+
+func (t *MemoryReadTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
+}
+
 func (t *MemoryReadTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
@@ -186,6 +202,14 @@ func (t *MemoryListTool) Name() string {
 
 func (t *MemoryListTool) Description() string {
 	return "List all memories with optional filtering"
+}
+
+func (t *MemoryListTool) Title() string {
+	return "List Memories"
+}
+
+func (t *MemoryListTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
 }
 
 func (t *MemoryListTool) Schema() json.RawMessage {
@@ -253,6 +277,14 @@ func (t *MemorySearchTool) Name() string {
 
 func (t *MemorySearchTool) Description() string {
 	return "Search memories by content or tags"
+}
+
+func (t *MemorySearchTool) Title() string {
+	return "Search Memories"
+}
+
+func (t *MemorySearchTool) Annotations() map[string]bool {
+	return tools.ReadOnlyAnnotations()
 }
 
 func (t *MemorySearchTool) Schema() json.RawMessage {
@@ -332,6 +364,14 @@ func (t *MemoryDeleteTool) Name() string {
 
 func (t *MemoryDeleteTool) Description() string {
 	return "Delete a memory by name"
+}
+
+func (t *MemoryDeleteTool) Title() string {
+	return "Delete Memory"
+}
+
+func (t *MemoryDeleteTool) Annotations() map[string]bool {
+	return tools.DestructiveAnnotations()
 }
 
 func (t *MemoryDeleteTool) Schema() json.RawMessage {
