@@ -13,6 +13,7 @@ import (
 
 	"github.com/alucardeht/may-la-mcp/internal/mcp"
 	"github.com/alucardeht/may-la-mcp/internal/tools"
+	"github.com/alucardeht/may-la-mcp/internal/tools/docs"
 	"github.com/alucardeht/may-la-mcp/internal/tools/files"
 	"github.com/alucardeht/may-la-mcp/internal/tools/memory"
 	"github.com/alucardeht/may-la-mcp/internal/tools/search"
@@ -54,6 +55,12 @@ func (d *Daemon) registerAllTools() error {
 	for _, tool := range files.GetTools() {
 		if err := d.registry.Register(tool); err != nil {
 			return fmt.Errorf("files: %w", err)
+		}
+	}
+
+	for _, tool := range docs.GetTools() {
+		if err := d.registry.Register(tool); err != nil {
+			return fmt.Errorf("docs: %w", err)
 		}
 	}
 

@@ -21,7 +21,7 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 
 ## 📋 Features
 
-### 17 Production-Ready Tools Across 4 Categories
+### 20 Production-Ready Tools Across 5 Categories
 
 #### 📁 File Operations (7 tools)
 - **`read`** — Read files with intelligent chunking and progress tracking
@@ -38,12 +38,17 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 - **`symbols`** — Extract code symbols using Tree-sitter (Go, Python, TypeScript, etc.)
 - **`references`** — Find symbol references across codebase
 
-#### 💾 Memory System (5 tools)
+#### 💾 Memory System (6 tools)
 - **`memory_write`** — Save long-term memory with auto-versioning
 - **`memory_read`** — Retrieve memories by name and version
 - **`memory_list`** — List all stored memories with metadata
 - **`memory_search`** — Semantic search over memories using FTS5
 - **`memory_delete`** — Remove memories with safety checks
+- **`memory_update`** — Update existing memory content, category, or tags with partial updates and append mode
+
+#### 📄 Documentation (2 tools)
+- **`doc_write`** — Write project documentation files with automatic directory creation
+- **`doc_read`** — Read project documentation files
 
 #### 🏥 System (1 tool)
 - **`health`** — Check daemon status and version
