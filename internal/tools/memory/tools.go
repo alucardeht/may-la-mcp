@@ -18,6 +18,7 @@ func GetTools(dbPath string) ([]tools.Tool, error) {
 	return []tools.Tool{
 		NewMemoryWriteTool(store),
 		NewMemoryReadTool(store),
+		NewMemoryUpdateTool(store),
 		NewMemoryListTool(store),
 		NewMemorySearchTool(store),
 		NewMemoryDeleteTool(store),
@@ -37,7 +38,29 @@ func (t *MemoryWriteTool) Name() string {
 }
 
 func (t *MemoryWriteTool) Description() string {
-	return "Write content to persistent memory"
+	return `Write content to persistent cross-project memory.
+
+PURPOSE: Knowledge that persists across projects and sessions.
+
+WHEN TO USE memory_write:
+- Architectural patterns that apply to multiple projects
+- Personal coding conventions and preferences
+- Tool configurations and workflows
+- Learnings from debugging sessions
+- Patterns you want to remember across projects
+
+WHEN TO USE doc_write INSTEAD:
+- Project-specific documentation (README, API docs)
+- Architecture Decision Records for THIS project
+- Setup guides for THIS codebase
+- Anything that should be version-controlled with the project
+
+CATEGORIES:
+- architecture: System design patterns
+- conventions: Coding standards, naming patterns
+- decisions: Why choices were made
+- context: Background information
+- general: General observations and notes`
 }
 
 func (t *MemoryWriteTool) Title() string {
@@ -62,7 +85,7 @@ func (t *MemoryWriteTool) Schema() json.RawMessage {
 			},
 			"category": {
 				"type": "string",
-				"enum": ["architecture", "conventions", "decisions", "context", "notes"],
+				"enum": ["architecture", "conventions", "decisions", "context", "general"],
 				"description": "Memory category"
 			},
 			"tags": {
@@ -185,6 +208,128 @@ func (t *MemoryReadTool) Execute(input json.RawMessage) (interface{}, error) {
 		"updated_at":    mem.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		"accessed_at":   mem.AccessedAt.Format("2006-01-02T15:04:05Z07:00"),
 		"access_count":  mem.AccessCount,
+	}, nil
+}
+
+type MemoryUpdateTool struct {
+	store *MemoryStore
+}
+
+func NewMemoryUpdateTool(store *MemoryStore) *MemoryUpdateTool {
+	return &MemoryUpdateTool{store: store}
+}
+
+func (t *MemoryUpdateTool) Name() string {
+	return "memory_update"
+}
+
+func (t *MemoryUpdateTool) Description() string {
+	return `Update existing memory content, category, or tags.
+
+PARTIAL UPDATES: Only provided fields are updated. Omit fields to keep current values.
+
+APPEND MODE: Set append=true to add content to end instead of replacing.
+
+USE CASES:
+- Add new learnings to existing memory
+- Change category as understanding evolves
+- Update tags for better searchability
+
+For complete rewrites, use memory_write instead.`
+}
+
+func (t *MemoryUpdateTool) Title() string {
+	return "Update Memory"
+}
+
+func (t *MemoryUpdateTool) Annotations() map[string]bool {
+	return tools.SafeWriteAnnotations()
+}
+
+func (t *MemoryUpdateTool) Schema() json.RawMessage {
+	return json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"name": {
+				"type": "string",
+				"description": "Memory name/identifier (required)"
+			},
+			"content": {
+				"type": "string",
+				"description": "New content or content to append (optional - omit to keep current)"
+			},
+			"category": {
+				"type": "string",
+				"enum": ["architecture", "conventions", "decisions", "context", "general"],
+				"description": "New category (optional - omit to keep current)"
+			},
+			"tags": {
+				"type": "array",
+				"items": {"type": "string"},
+				"description": "New tags (optional - omit to keep current)"
+			},
+			"append": {
+				"type": "boolean",
+				"description": "If true, append content instead of replacing (default: false)"
+			}
+		},
+		"required": ["name"]
+	}`)
+}
+
+func (t *MemoryUpdateTool) Execute(input json.RawMessage) (interface{}, error) {
+	var req struct {
+		Name     string   `json:"name"`
+		Content  string   `json:"content"`
+		Category string   `json:"category"`
+		Tags     []string `json:"tags"`
+		Append   bool     `json:"append"`
+	}
+	if err := json.Unmarshal(input, &req); err != nil {
+		return nil, err
+	}
+
+	if req.Name == "" {
+		return nil, fmt.Errorf("memory name is required")
+	}
+
+	existing, err := t.store.Read(req.Name)
+	if err != nil {
+		return nil, fmt.Errorf("memory not found: %w", err)
+	}
+
+	finalContent := existing.Content
+	if req.Content != "" {
+		if req.Append {
+			finalContent = existing.Content + "\n" + req.Content
+		} else {
+			finalContent = req.Content
+		}
+	}
+
+	finalTags := existing.Tags
+	if len(req.Tags) > 0 {
+		finalTags = req.Tags
+	}
+
+	finalCategory := existing.Category
+	if req.Category != "" {
+		finalCategory = Category(req.Category)
+	}
+
+	updated, err := t.store.UpdateFull(existing.ID, finalContent, finalCategory, finalTags)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update memory: %w", err)
+	}
+
+	return map[string]interface{}{
+		"success":    true,
+		"id":         updated.ID,
+		"name":       updated.Name,
+		"content":    updated.Content,
+		"category":   updated.Category,
+		"tags":       updated.Tags,
+		"updated_at": updated.UpdatedAt,
 	}, nil
 }
 

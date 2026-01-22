@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/alucardeht/may-la-mcp/internal/tools"
+	"github.com/alucardeht/may-la-mcp/internal/tools/docs"
 	"github.com/alucardeht/may-la-mcp/internal/tools/files"
 	"github.com/alucardeht/may-la-mcp/internal/tools/memory"
 	"github.com/alucardeht/may-la-mcp/internal/tools/search"
@@ -27,6 +28,9 @@ func TestAllToolsE2E(t *testing.T) {
 		for _, tool := range files.GetTools() {
 			registry.Register(tool)
 		}
+		for _, tool := range docs.GetTools() {
+			registry.Register(tool)
+		}
 		for _, tool := range search.GetTools() {
 			registry.Register(tool)
 		}
@@ -41,7 +45,7 @@ func TestAllToolsE2E(t *testing.T) {
 		}
 
 		names := registry.Names()
-		expectedCount := 18
+		expectedCount := 21
 		if len(names) != expectedCount {
 			t.Errorf("Expected %d tools, got %d: %v", expectedCount, len(names), names)
 		}

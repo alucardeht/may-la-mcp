@@ -227,6 +227,81 @@ func (s *MemoryStore) Update(id, content string, tags []string) (*Memory, error)
 	return s.Read(id)
 }
 
+func (s *MemoryStore) UpdateFull(id, content string, category Category, tags []string) (*Memory, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tagsJSON, err := json.Marshal(tags)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = tx.Exec(
+		"UPDATE memories SET content = ?, category = ?, tags = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+		content, category, string(tagsJSON), now, id,
+	)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	row := tx.QueryRow(
+		"SELECT id, name, content, category, tags, created_at, updated_at, accessed_at, access_count FROM memories WHERE id = ?",
+		id,
+	)
+
+	memory := &Memory{}
+	var tagsJSONFromDB sql.NullString
+
+	err = row.Scan(
+		&memory.ID, &memory.Name, &memory.Content, &memory.Category, &tagsJSONFromDB,
+		&memory.CreatedAt, &memory.UpdatedAt, &memory.AccessedAt, &memory.AccessCount,
+	)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if tagsJSONFromDB.Valid {
+		if err := json.Unmarshal([]byte(tagsJSONFromDB.String), &memory.Tags); err != nil {
+			memory.Tags = []string{}
+		}
+	} else {
+		memory.Tags = []string{}
+	}
+
+	_, err = tx.Exec(
+		"DELETE FROM memories_fts WHERE name = ?",
+		memory.Name,
+	)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	_, err = tx.Exec(
+		"INSERT INTO memories_fts (name, content) VALUES (?, ?)",
+		memory.Name, content,
+	)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return memory, nil
+}
+
 func (s *MemoryStore) Delete(identifier string) (string, *time.Time, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
