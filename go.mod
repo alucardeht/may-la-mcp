@@ -1,8 +1,14 @@
 module github.com/alucardeht/may-la-mcp
 
-go 1.22
+go 1.24.0
 
-require modernc.org/sqlite v1.29.1
+require (
+	github.com/bmatcuk/doublestar/v4 v4.10.0
+	github.com/fsnotify/fsnotify v1.9.0
+	github.com/sourcegraph/jsonrpc2 v0.2.1
+	golang.org/x/text v0.33.0
+	modernc.org/sqlite v1.29.1
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

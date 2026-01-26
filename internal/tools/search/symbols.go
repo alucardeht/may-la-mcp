@@ -2,6 +2,7 @@ package search
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,7 +10,10 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/alucardeht/may-la-mcp/internal/index"
+	"github.com/alucardeht/may-la-mcp/internal/router"
 	"github.com/alucardeht/may-la-mcp/internal/tools"
+	"github.com/alucardeht/may-la-mcp/internal/types"
 )
 
 type SymbolsRequest struct {
@@ -19,20 +23,18 @@ type SymbolsRequest struct {
 	MaxResults int      `json:"max_results,omitempty"`
 }
 
-type Symbol struct {
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`
-	File      string `json:"file"`
-	Line      int    `json:"line"`
-	Signature string `json:"signature,omitempty"`
-}
-
 type SymbolsResponse struct {
-	Symbols []Symbol `json:"symbols"`
-	Count   int      `json:"count"`
+	Symbols []types.Symbol `json:"symbols"`
+	Count   int            `json:"count"`
 }
 
-type SymbolsTool struct{}
+type SymbolsTool struct {
+	router *router.Router
+}
+
+func NewSymbolsTool(r *router.Router) *SymbolsTool {
+	return &SymbolsTool{router: r}
+}
 
 func (t *SymbolsTool) Name() string {
 	return "symbols"
@@ -92,41 +94,75 @@ func (t *SymbolsTool) Execute(input json.RawMessage) (interface{}, error) {
 		req.MaxResults = 500
 	}
 
+	ctx := context.Background()
+
+	opts := router.QueryOptions{
+		MaxResults:   req.MaxResults,
+		AllowFallback: true,
+	}
+
+	if t.router != nil {
+		result, err := t.router.QuerySymbols(ctx, req.Path, req.Query, req.Kinds, opts)
+		if err != nil {
+			return nil, fmt.Errorf("query symbols: %w", err)
+		}
+
+		symbols := make([]types.Symbol, len(result.Items))
+		for i, sym := range result.Items {
+			symbols[i] = types.Symbol{
+				Name:      sym.Name,
+				Kind:      sym.Kind,
+				File:      sym.File,
+				Line:      sym.Line,
+				Signature: sym.Signature,
+			}
+		}
+
+		return &SymbolsResponse{
+			Symbols: symbols,
+			Count:   len(symbols),
+		}, nil
+	}
+
+	return t.executeRegex(ctx, req.Path, req.Query, req.Kinds, req.MaxResults)
+}
+
+func (t *SymbolsTool) executeRegex(ctx context.Context, path, query string, kinds []string, maxResults int) (interface{}, error) {
 	kindMap := make(map[string]bool)
-	if len(req.Kinds) == 0 {
+	if len(kinds) == 0 {
 		for _, k := range []string{"function", "class", "method", "variable", "interface", "type", "const"} {
 			kindMap[k] = true
 		}
 	} else {
-		for _, k := range req.Kinds {
+		for _, k := range kinds {
 			kindMap[k] = true
 		}
 	}
 
-	symbols := []Symbol{}
+	symbols := []types.Symbol{}
 
-	info, err := os.Stat(req.Path)
+	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("path not found: %w", err)
 	}
 
 	if info.IsDir() {
-		err = filepath.WalkDir(req.Path, func(path string, d os.DirEntry, err error) error {
+		err = filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
 			if err != nil {
 				return nil
 			}
-			if !d.IsDir() && isSourceFile(path) {
-				fileSymbols := extractSymbols(path, kindMap, req.Query)
+			if !d.IsDir() && isSourceFile(p) {
+				fileSymbols := extractSymbols(p, kindMap, query)
 				symbols = append(symbols, fileSymbols...)
-				if len(symbols) >= req.MaxResults {
+				if len(symbols) >= maxResults {
 					return filepath.SkipDir
 				}
 			}
 			return nil
 		})
 	} else {
-		if isSourceFile(req.Path) {
-			symbols = extractSymbols(req.Path, kindMap, req.Query)
+		if isSourceFile(path) {
+			symbols = extractSymbols(path, kindMap, query)
 		}
 	}
 
@@ -134,8 +170,8 @@ func (t *SymbolsTool) Execute(input json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("walk error: %w", err)
 	}
 
-	if len(symbols) > req.MaxResults {
-		symbols = symbols[:req.MaxResults]
+	if len(symbols) > maxResults {
+		symbols = symbols[:maxResults]
 	}
 
 	return &SymbolsResponse{
@@ -154,33 +190,32 @@ func isSourceFile(path string) bool {
 	return sourceExts[ext]
 }
 
-func extractSymbols(filePath string, kindMap map[string]bool, query string) []Symbol {
-	file, err := os.Open(filePath)
+func extractSymbols(filePath string, kindMap map[string]bool, query string) []types.Symbol {
+	content, _, err := index.ReadFileAsUTF8(filePath)
 	if err != nil {
 		return nil
 	}
-	defer file.Close()
 
 	ext := filepath.Ext(filePath)
-	symbols := []Symbol{}
+	symbols := []types.Symbol{}
 
 	switch ext {
 	case ".go":
-		symbols = extractGoSymbols(file, filePath, kindMap, query)
+		symbols = extractGoSymbols(content, filePath, kindMap, query)
 	case ".js", ".ts", ".tsx", ".jsx":
-		symbols = extractJSSymbols(file, filePath, kindMap, query)
+		symbols = extractJSSymbols(content, filePath, kindMap, query)
 	case ".py":
-		symbols = extractPythonSymbols(file, filePath, kindMap, query)
+		symbols = extractPythonSymbols(content, filePath, kindMap, query)
 	case ".java":
-		symbols = extractJavaSymbols(file, filePath, kindMap, query)
+		symbols = extractJavaSymbols(content, filePath, kindMap, query)
 	}
 
 	return symbols
 }
 
-func extractGoSymbols(file *os.File, filePath string, kindMap map[string]bool, query string) []Symbol {
-	symbols := []Symbol{}
-	scanner := bufio.NewScanner(file)
+func extractGoSymbols(content string, filePath string, kindMap map[string]bool, query string) []types.Symbol {
+	symbols := []types.Symbol{}
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	lineNum := 0
 
 	funcRe := regexp.MustCompile(`^\s*func\s+\(([^)]*)\)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`)
@@ -196,7 +231,7 @@ func extractGoSymbols(file *os.File, filePath string, kindMap map[string]bool, q
 		if match := funcRe.FindStringSubmatch(line); len(match) > 2 && kindMap["method"] {
 			name := match[2]
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      "method",
 					File:      filePath,
@@ -207,7 +242,7 @@ func extractGoSymbols(file *os.File, filePath string, kindMap map[string]bool, q
 		} else if match := funcRe2.FindStringSubmatch(line); len(match) > 1 && kindMap["function"] {
 			name := match[1]
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      "function",
 					File:      filePath,
@@ -224,7 +259,7 @@ func extractGoSymbols(file *os.File, filePath string, kindMap map[string]bool, q
 				if len(match) > 2 && match[2] == "interface" {
 					kind = "interface"
 				}
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      kind,
 					File:      filePath,
@@ -237,7 +272,7 @@ func extractGoSymbols(file *os.File, filePath string, kindMap map[string]bool, q
 		if match := constRe.FindStringSubmatch(line); len(match) > 1 && kindMap["const"] {
 			name := match[1]
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      "const",
 					File:      filePath,
@@ -250,7 +285,7 @@ func extractGoSymbols(file *os.File, filePath string, kindMap map[string]bool, q
 		if match := varRe.FindStringSubmatch(line); len(match) > 1 && kindMap["variable"] {
 			name := match[1]
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      "variable",
 					File:      filePath,
@@ -264,9 +299,9 @@ func extractGoSymbols(file *os.File, filePath string, kindMap map[string]bool, q
 	return symbols
 }
 
-func extractJSSymbols(file *os.File, filePath string, kindMap map[string]bool, query string) []Symbol {
-	symbols := []Symbol{}
-	scanner := bufio.NewScanner(file)
+func extractJSSymbols(content string, filePath string, kindMap map[string]bool, query string) []types.Symbol {
+	symbols := []types.Symbol{}
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	lineNum := 0
 
 	funcRe := regexp.MustCompile(`(?:^|\s)(function|const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?:=.*=>|\()`)
@@ -279,7 +314,7 @@ func extractJSSymbols(file *os.File, filePath string, kindMap map[string]bool, q
 		if match := classRe.FindStringSubmatch(line); len(match) > 1 && kindMap["class"] {
 			name := match[1]
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      "class",
 					File:      filePath,
@@ -297,7 +332,7 @@ func extractJSSymbols(file *os.File, filePath string, kindMap map[string]bool, q
 				continue
 			}
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      symbolKind,
 					File:      filePath,
@@ -311,9 +346,9 @@ func extractJSSymbols(file *os.File, filePath string, kindMap map[string]bool, q
 	return symbols
 }
 
-func extractPythonSymbols(file *os.File, filePath string, kindMap map[string]bool, query string) []Symbol {
-	symbols := []Symbol{}
-	scanner := bufio.NewScanner(file)
+func extractPythonSymbols(content string, filePath string, kindMap map[string]bool, query string) []types.Symbol {
+	symbols := []types.Symbol{}
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	lineNum := 0
 
 	funcRe := regexp.MustCompile(`^\s*def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`)
@@ -326,7 +361,7 @@ func extractPythonSymbols(file *os.File, filePath string, kindMap map[string]boo
 		if match := classRe.FindStringSubmatch(line); len(match) > 1 && kindMap["class"] {
 			name := match[1]
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      "class",
 					File:      filePath,
@@ -350,7 +385,7 @@ func extractPythonSymbols(file *os.File, filePath string, kindMap map[string]boo
 			}
 
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      kind,
 					File:      filePath,
@@ -364,9 +399,9 @@ func extractPythonSymbols(file *os.File, filePath string, kindMap map[string]boo
 	return symbols
 }
 
-func extractJavaSymbols(file *os.File, filePath string, kindMap map[string]bool, query string) []Symbol {
-	symbols := []Symbol{}
-	scanner := bufio.NewScanner(file)
+func extractJavaSymbols(content string, filePath string, kindMap map[string]bool, query string) []types.Symbol {
+	symbols := []types.Symbol{}
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	lineNum := 0
 
 	classRe := regexp.MustCompile(`\b(class|interface)\s+([a-zA-Z_][a-zA-Z0-9_]*)`)
@@ -386,7 +421,7 @@ func extractJavaSymbols(file *os.File, filePath string, kindMap map[string]bool,
 			}
 
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      kind,
 					File:      filePath,
@@ -399,7 +434,7 @@ func extractJavaSymbols(file *os.File, filePath string, kindMap map[string]bool,
 		if match := methodRe.FindStringSubmatch(line); len(match) > 1 && kindMap["method"] {
 			name := match[1]
 			if matchesQuery(name, query) {
-				symbols = append(symbols, Symbol{
+				symbols = append(symbols, types.Symbol{
 					Name:      name,
 					Kind:      "method",
 					File:      filePath,

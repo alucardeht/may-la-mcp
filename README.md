@@ -35,8 +35,8 @@ May-la is purpose-built for Claude-Claude operations where response time directl
 #### 🔍 Search & Navigation (4 tools)
 - **`search`** — Full-text search powered by ripgrep with context
 - **`find`** — Find files by pattern (glob/regex)
-- **`symbols`** — Extract code symbols using Tree-sitter (Go, Python, TypeScript, etc.)
-- **`references`** — Find symbol references across codebase
+- **`symbols`** — Extract code symbols with semantic intelligence (LSP → Index → Regex fallback)
+- **`references`** — Find symbol references across codebase with LSP support
 
 #### 💾 Memory System (6 tools)
 - **`memory_write`** — Save long-term memory with auto-versioning
@@ -63,6 +63,45 @@ All tools include MCP annotations for smarter client integration:
 | `destructiveHint` | Tool can delete or permanently modify data |
 | `idempotentHint` | Tool can be safely retried with same result |
 | `openWorldHint` | Tool may return evolving/dynamic results |
+
+## 🧠 Semantic Code Intelligence
+
+May-la provides intelligent code understanding through a 3-tier semantic analysis system:
+
+### Architecture
+
+```
+Query → Index (SQLite FTS5) → LSP Server → Regex Fallback
+              ↓                    ↓              ↓
+         Cached symbols      Language        Pattern-based
+         (sub-ms lookup)     Analysis        extraction
+```
+
+### Supported Language Servers
+
+| Language | LSP Server | Status | Extensions |
+|----------|-----------|--------|------------|
+| Go | gopls | ✅ Enabled | `.go` |
+| TypeScript | typescript-language-server | ✅ Enabled | `.ts`, `.tsx` |
+| JavaScript | typescript-language-server | ✅ Enabled | `.js`, `.jsx`, `.mjs` |
+| Python | pylsp | ✅ Enabled | `.py` |
+| Rust | rust-analyzer | ✅ Enabled | `.rs` |
+| C/C++ | clangd | ✅ Enabled | `.c`, `.cpp`, `.h` |
+| Java | jdtls | ⚠️ Disabled | `.java` |
+
+### SQLite FTS5 Index
+
+- Automatic symbol indexing with full-text search
+- Sub-millisecond lookups for cached results
+- Background incremental updates via file watching
+
+### Encoding Support (30+)
+
+Automatic encoding detection and normalization:
+- **Unicode:** UTF-8, UTF-16 LE/BE (with BOM support)
+- **Asian:** Shift-JIS, EUC-JP, GBK, GB18030, Big5, EUC-KR
+- **Latin:** ISO-8859-1 through 16, Windows-1250 through 1258
+- **Cyrillic:** KOI8-R, KOI8-U
 
 ## 🛠 Installation
 
@@ -302,35 +341,31 @@ Input:
 ```
 may-la-mcp/
 ├── cmd/
-│   ├── mayla/                 # CLI tool for local testing
-│   └── mayla-daemon/          # MCP daemon (JSON-RPC server)
+│   ├── mayla/                 # MCP stdio adapter
+│   └── mayla-daemon/          # Background daemon (Unix socket)
 ├── internal/
-│   ├── core/
-│   │   ├── config.go          # Configuration management
-│   │   └── lifecycle.go       # Initialization and shutdown
-│   ├── daemon/
-│   │   ├── server.go          # Unix socket server
-│   │   └── protocol.go        # JSON-RPC 2.0 handling
-│   ├── mcp/
-│   │   ├── handler.go         # MCP request routing
-│   │   └── types.go           # Protocol types
-│   └── tools/
-│       ├── files/             # File operation implementations
-│       │   ├── read.go
-│       │   ├── write.go
-│       │   └── ...
-│       ├── search/            # Search and navigation
-│       │   ├── ripgrep.go
-│       │   ├── symbols.go
-│       │   └── ...
-│       └── memory/            # Memory system
-│           └── ...
-├── tests/
-│   ├── e2e_test.go           # End-to-end integration tests
-│   └── fixtures/             # Test data and fixtures
-├── Makefile                  # Build automation
-├── go.mod                    # Go module definition
-└── README.md                 # This file
+│   ├── config/                # Configuration management
+│   ├── daemon/                # Socket server, JSON-RPC handling
+│   ├── index/                 # SQLite FTS5 symbol indexing
+│   │   ├── store.go           # Database operations
+│   │   ├── worker.go          # Background indexer
+│   │   └── encoder.go         # Encoding detection (30+ encodings)
+│   ├── logger/                # Structured logging (slog)
+│   ├── lsp/                   # Language Server Protocol
+│   │   ├── manager.go         # LSP lifecycle management
+│   │   ├── client.go          # JSON-RPC client
+│   │   └── config.go          # LSP configurations
+│   ├── mcp/                   # MCP protocol handler
+│   ├── router/                # Query routing (Index → LSP → Regex)
+│   ├── tools/
+│   │   ├── files/             # File operations
+│   │   ├── search/            # Search & navigation
+│   │   └── memory/            # Memory system
+│   ├── types/                 # Shared type definitions
+│   └── watcher/               # File system watcher (fsnotify)
+├── tests/                     # E2E tests
+├── Makefile                   # Build automation
+└── README.md
 ```
 
 ## 🔧 Development

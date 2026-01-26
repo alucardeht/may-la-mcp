@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -11,13 +12,21 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alucardeht/may-la-mcp/internal/config"
+	"github.com/alucardeht/may-la-mcp/internal/index"
+	"github.com/alucardeht/may-la-mcp/internal/logger"
+	"github.com/alucardeht/may-la-mcp/internal/lsp"
 	"github.com/alucardeht/may-la-mcp/internal/mcp"
+	"github.com/alucardeht/may-la-mcp/internal/router"
 	"github.com/alucardeht/may-la-mcp/internal/tools"
 	"github.com/alucardeht/may-la-mcp/internal/tools/docs"
 	"github.com/alucardeht/may-la-mcp/internal/tools/files"
 	"github.com/alucardeht/may-la-mcp/internal/tools/memory"
 	"github.com/alucardeht/may-la-mcp/internal/tools/search"
+	"github.com/alucardeht/may-la-mcp/internal/watcher"
 )
+
+var log = logger.ForComponent("daemon")
 
 type Daemon struct {
 	socketPath    string
@@ -29,20 +38,64 @@ type Daemon struct {
 	shutdown      chan struct{}
 	shutdownOnce  sync.Once
 	startTime     time.Time
+	config        *config.Config
+	indexStore    *index.IndexStore
+	indexWorker   *index.IndexWorker
+	lspManager    *lsp.Manager
+	routerInstance *router.Router
+	fileWatcher   *watcher.Watcher
 }
 
-func NewDaemon(socketPath string) (*Daemon, error) {
+func NewDaemon(cfg *config.Config) (*Daemon, error) {
+	log.Info("initializing daemon", "socket", cfg.SocketPath)
+
+	indexStore, err := index.NewIndexStore(cfg.Index.DBPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create index store: %w", err)
+	}
+	log.Info("index store initialized", "path", cfg.Index.DBPath)
+
+	indexWorkerConfig := index.WorkerConfig{
+		WorkerCount:     cfg.Index.WorkerCount,
+		MaxQueueSize:    cfg.Index.MaxQueueSize,
+		RateLimit:       cfg.Index.RateLimit,
+		MaxFileSize:     cfg.Index.MaxFileSize,
+		ExcludePatterns: cfg.Index.ExcludePatterns,
+	}
+	indexWorker := index.NewIndexWorker(indexStore, indexWorkerConfig)
+	log.Info("index worker initialized", "workers", cfg.Index.WorkerCount)
+
+	lspManager := lsp.NewManager(cfg.LSP)
+	log.Info("LSP manager initialized")
+
+	routerInstance := router.NewRouter(indexStore, lspManager)
+	log.Info("router initialized")
+
+	watcherInstance, err := watcher.New(cfg.Watcher, indexWorker)
+	if err != nil {
+		indexStore.Close()
+		return nil, fmt.Errorf("failed to create watcher: %w", err)
+	}
+	log.Info("watcher initialized")
+
 	d := &Daemon{
-		socketPath:  socketPath,
-		registry:    tools.NewRegistry(),
-		connections: make(map[net.Conn]bool),
-		shutdown:    make(chan struct{}),
-		startTime:   time.Now(),
+		socketPath:     cfg.SocketPath,
+		registry:       tools.NewRegistry(),
+		connections:    make(map[net.Conn]bool),
+		shutdown:       make(chan struct{}),
+		startTime:      time.Now(),
+		config:         cfg,
+		indexStore:     indexStore,
+		indexWorker:    indexWorker,
+		lspManager:     lspManager,
+		routerInstance: routerInstance,
+		fileWatcher:    watcherInstance,
 	}
 
 	d.server = mcp.NewServer(d.registry)
 
 	if err := d.registerAllTools(); err != nil {
+		d.cleanupComponents()
 		return nil, fmt.Errorf("failed to register tools: %w", err)
 	}
 
@@ -64,7 +117,7 @@ func (d *Daemon) registerAllTools() error {
 		}
 	}
 
-	for _, tool := range search.GetTools() {
+	for _, tool := range search.GetTools(d.routerInstance) {
 		if err := d.registry.Register(tool); err != nil {
 			return fmt.Errorf("search: %w", err)
 		}
@@ -88,6 +141,8 @@ func (d *Daemon) registerAllTools() error {
 }
 
 func (d *Daemon) Start() error {
+	log.Info("daemon starting", "socket", d.socketPath)
+
 	if err := os.RemoveAll(d.socketPath); err != nil {
 		return fmt.Errorf("failed to remove socket: %w", err)
 	}
@@ -105,6 +160,29 @@ func (d *Daemon) Start() error {
 
 	if err := os.Chmod(d.socketPath, 0700); err != nil {
 		return fmt.Errorf("failed to chmod socket: %w", err)
+	}
+
+	log.Info("listening on socket", "path", d.socketPath)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-d.shutdown
+		cancel()
+	}()
+
+	if d.config.Index.Enabled && d.indexWorker != nil {
+		d.indexWorker.Start()
+	}
+
+	if d.config.Watcher.Enabled && d.fileWatcher != nil {
+		if err := d.fileWatcher.Start(ctx); err != nil {
+			log.Warn("failed to start watcher", "error", err)
+		} else {
+			cwd, err := os.Getwd()
+			if err == nil {
+				d.fileWatcher.AddRoot(cwd)
+			}
+		}
 	}
 
 	go d.acceptConnections()
@@ -129,6 +207,7 @@ func (d *Daemon) acceptConnections() {
 		d.connections[conn] = true
 		d.connMu.Unlock()
 
+		log.Debug("accepted connection", "client", conn.RemoteAddr().String())
 		go d.handleConnection(conn)
 	}
 }
@@ -168,7 +247,11 @@ func (d *Daemon) handleSignals() {
 
 func (d *Daemon) Shutdown() {
 	d.shutdownOnce.Do(func() {
+		log.Info("daemon shutting down")
+
 		close(d.shutdown)
+
+		d.cleanupComponents()
 
 		if d.listener != nil {
 			d.listener.Close()
@@ -181,7 +264,26 @@ func (d *Daemon) Shutdown() {
 		d.connMu.Unlock()
 
 		os.Remove(d.socketPath)
+		log.Info("daemon stopped")
 	})
+}
+
+func (d *Daemon) cleanupComponents() {
+	if d.fileWatcher != nil {
+		d.fileWatcher.Stop()
+	}
+
+	if d.indexWorker != nil {
+		d.indexWorker.Stop()
+	}
+
+	if d.lspManager != nil {
+		d.lspManager.StopAll(context.Background())
+	}
+
+	if d.indexStore != nil {
+		d.indexStore.Close()
+	}
 }
 
 func (d *Daemon) SocketPath() string {

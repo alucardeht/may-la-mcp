@@ -2,13 +2,21 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/alucardeht/may-la-mcp/internal/config"
 	"github.com/alucardeht/may-la-mcp/internal/daemon"
+	"github.com/alucardeht/may-la-mcp/internal/logger"
 )
+
+func init() {
+	logCfg := logger.DefaultConfig()
+	logCfg.Level = slog.LevelDebug
+	logger.Init(logCfg)
+}
 
 func main() {
 	cfg := config.Load()
@@ -16,7 +24,7 @@ func main() {
 		log.Fatalf("Failed to ensure directories: %v", err)
 	}
 
-	d, err := daemon.NewDaemon(cfg.SocketPath)
+	d, err := daemon.NewDaemon(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create daemon: %v", err)
 	}
