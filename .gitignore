@@ -13,3 +13,8 @@ coverage.txt
 CLAUDE-GLOBAL.md
 CLAUDE.md
 CLAUDE-PROJECT.md
+
+# Root-level compiled binaries (development artifacts)
+may-la
+mayla
+mayla-daemon

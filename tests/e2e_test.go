@@ -31,7 +31,7 @@ func TestAllToolsE2E(t *testing.T) {
 		for _, tool := range docs.GetTools() {
 			registry.Register(tool)
 		}
-		for _, tool := range search.GetTools() {
+		for _, tool := range search.GetTools(nil) {
 			registry.Register(tool)
 		}
 
@@ -191,7 +191,7 @@ func main() {
 		}
 		t.Logf("✅ Find: %v", result)
 
-		symbolsTool := &search.SymbolsTool{}
+		symbolsTool := search.NewSymbolsTool(nil)
 		input, _ = json.Marshal(map[string]interface{}{
 			"path": goFile,
 		})
@@ -201,7 +201,7 @@ func main() {
 		}
 		t.Logf("✅ Symbols: %v", result)
 
-		refsTool := &search.ReferencesTool{}
+		refsTool := search.NewReferencesTool(nil)
 		input, _ = json.Marshal(map[string]interface{}{
 			"path":   testDir,
 			"symbol": "HelloWorld",
@@ -317,7 +317,7 @@ func TestToolsIndividually(t *testing.T) {
 		})
 	}
 
-	searchTools := search.GetTools()
+	searchTools := search.GetTools(nil)
 	for _, tool := range searchTools {
 		t.Run("Tool_"+tool.Name(), func(t *testing.T) {
 			if tool.Name() == "" {
@@ -412,7 +412,7 @@ func TestErrorScenarios(t *testing.T) {
 func TestToolMetadata(t *testing.T) {
 	t.Run("AllTools_HaveValidMetadata", func(t *testing.T) {
 		fileTools := files.GetTools()
-		searchTools := search.GetTools()
+		searchTools := search.GetTools(nil)
 		healthTool := tools.NewHealthTool()
 
 		allTools := make([]tools.Tool, 0)

@@ -1,7 +1,7 @@
 package search
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,7 +9,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/alucardeht/may-la-mcp/internal/router"
 	"github.com/alucardeht/may-la-mcp/internal/tools"
+	"github.com/alucardeht/may-la-mcp/internal/types"
 )
 
 type ReferencesRequest struct {
@@ -19,21 +21,19 @@ type ReferencesRequest struct {
 	MaxResults int    `json:"max_results,omitempty"`
 }
 
-type Reference struct {
-	File    string `json:"file"`
-	Line    int    `json:"line"`
-	Column  int    `json:"column"`
-	Context string `json:"context"`
-	Kind    string `json:"kind"`
-}
-
 type ReferencesResponse struct {
-	References []Reference `json:"references"`
-	Count      int         `json:"count"`
-	Symbol     string      `json:"symbol"`
+	References []types.Reference `json:"references"`
+	Count      int               `json:"count"`
+	Symbol     string            `json:"symbol"`
 }
 
-type ReferencesTool struct{}
+type ReferencesTool struct {
+	router *router.Router
+}
+
+func NewReferencesTool(r *router.Router) *ReferencesTool {
+	return &ReferencesTool{router: r}
+}
 
 func (t *ReferencesTool) Name() string {
 	return "references"
@@ -93,86 +93,112 @@ func (t *ReferencesTool) Execute(input json.RawMessage) (interface{}, error) {
 		req.MaxResults = 1000
 	}
 
-	if !req.Recursive {
-		req.Recursive = true
+	ctx := context.Background()
+
+	opts := router.QueryOptions{
+		MaxResults:    req.MaxResults,
+		AllowFallback: true,
 	}
 
-	references := []Reference{}
-	wordBoundaryPattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(req.Symbol) + `\b`)
+	if t.router != nil {
+		result, err := t.router.QueryReferences(ctx, req.Symbol, req.Path, opts)
+		if err != nil {
+			return nil, fmt.Errorf("query references: %w", err)
+		}
 
-	err := filepath.WalkDir(req.Path, func(path string, d os.DirEntry, err error) error {
+		references := make([]types.Reference, len(result.Items))
+		for i, ref := range result.Items {
+			references[i] = types.Reference{
+				File:    ref.File,
+				Line:    ref.Line,
+				Column:  ref.Column,
+				Context: ref.Context,
+				Kind:    ref.Kind,
+			}
+		}
+
+		return &ReferencesResponse{
+			References: references,
+			Count:      len(references),
+			Symbol:     req.Symbol,
+		}, nil
+	}
+
+	return t.executeRegex(ctx, req.Symbol, req.Path, req.MaxResults)
+}
+
+func (t *ReferencesTool) executeRegex(ctx context.Context, symbol, path string, maxResults int) (interface{}, error) {
+	result, err := findReferencesRegex(ctx, symbol, path, maxResults)
+	if err != nil {
+		return nil, fmt.Errorf("find references: %w", err)
+	}
+
+	return &ReferencesResponse{
+		References: result,
+		Count:      len(result),
+		Symbol:     symbol,
+	}, nil
+}
+
+func findReferencesRegex(ctx context.Context, symbol string, searchPath string, maxResults int) ([]types.Reference, error) {
+	var references []types.Reference
+
+	pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(symbol) + `\b`)
+
+	err := filepath.Walk(searchPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if !isSourceFile(path) {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
 		if err != nil {
 			return nil
 		}
 
-		if d.IsDir() {
-			if !req.Recursive && path != req.Path {
-				return filepath.SkipDir
-			}
-			return nil
-		}
+		lines := strings.Split(string(content), "\n")
+		for lineNum, line := range lines {
+			if pattern.MatchString(line) {
+				locs := pattern.FindAllStringIndex(line, -1)
+				for _, loc := range locs {
+					column := loc[0] + 1
+					kind := classifyReferenceKind(line, loc[0], symbol)
 
-		if len(references) >= req.MaxResults {
-			return filepath.SkipDir
-		}
+					references = append(references, types.Reference{
+						File:    path,
+						Line:    lineNum + 1,
+						Column:  column,
+						Context: strings.TrimSpace(line),
+						Kind:    kind,
+					})
 
-		if isSourceFile(path) {
-			fileRefs := findReferencesInFile(path, req.Symbol, wordBoundaryPattern)
-			references = append(references, fileRefs...)
-
-			if len(references) > req.MaxResults {
-				references = references[:req.MaxResults]
+					if len(references) >= maxResults {
+						return filepath.SkipAll
+					}
+				}
 			}
 		}
 
 		return nil
 	})
 
-	if err != nil {
-		return nil, fmt.Errorf("walk error: %w", err)
+	if err != nil && err != filepath.SkipAll {
+		return nil, err
 	}
 
-	return &ReferencesResponse{
-		References: references,
-		Count:      len(references),
-		Symbol:     req.Symbol,
-	}, nil
+	return references, nil
 }
 
-func findReferencesInFile(filePath string, symbol string, pattern *regexp.Regexp) []Reference {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil
-	}
-	defer file.Close()
-
-	references := []Reference{}
-	scanner := bufio.NewScanner(file)
-	lineNum := 0
-
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
-
-		locs := pattern.FindAllStringIndex(line, -1)
-		for _, loc := range locs {
-			column := loc[0] + 1
-			kind := determineReferenceKind(line, loc[0], symbol)
-
-			references = append(references, Reference{
-				File:    filePath,
-				Line:    lineNum,
-				Column:  column,
-				Context: strings.TrimSpace(line),
-				Kind:    kind,
-			})
-		}
-	}
-
-	return references
-}
-
-func determineReferenceKind(line string, position int, symbol string) string {
+func classifyReferenceKind(line string, position int, symbol string) string {
 	beforeContext := line[:position]
 
 	if strings.Contains(beforeContext, "//") {
