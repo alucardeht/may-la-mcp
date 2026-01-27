@@ -59,6 +59,8 @@ check_and_update() {
     fi
 
     if [ "$latest" != "$current" ] || [ ! -f "$MAYLA_CLI" ] || [ ! -f "$MAYLA_DAEMON" ]; then
+        pkill -f "mayla-daemon" 2>/dev/null || true
+        sleep 0.5
         download_binary "$latest"
     fi
 }
