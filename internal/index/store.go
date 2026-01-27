@@ -36,6 +36,10 @@ func NewIndexStore(dbPath string) (*IndexStore, error) {
 		return nil, err
 	}
 
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return nil, err
+	}
+
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		return nil, err
 	}

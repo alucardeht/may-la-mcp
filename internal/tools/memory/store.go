@@ -30,6 +30,10 @@ func NewMemoryStore(dbPath string) (*MemoryStore, error) {
 		return nil, err
 	}
 
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return nil, err
+	}
+
 	store := &MemoryStore{db: db}
 	if err := store.initSchema(); err != nil {
 		return nil, err
@@ -134,8 +138,8 @@ func (s *MemoryStore) Create(id, name, content string, category Category, tags [
 }
 
 func (s *MemoryStore) Read(identifier string) (*Memory, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	row := s.db.QueryRow(
 		"SELECT id, name, content, category, tags, created_at, updated_at, accessed_at, access_count, deleted_at FROM memories WHERE (id = ? OR name = ?) AND deleted_at IS NULL",
@@ -171,6 +175,9 @@ func (s *MemoryStore) Read(identifier string) (*Memory, error) {
 }
 
 func (s *MemoryStore) Update(id, content string, tags []string) (*Memory, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	tagsJSON, err := json.Marshal(tags)
 	if err != nil {
 		return nil, err

@@ -44,6 +44,7 @@ type Daemon struct {
 	lspManager    *lsp.Manager
 	routerInstance *router.Router
 	fileWatcher   *watcher.Watcher
+	execSem       chan struct{}
 }
 
 func NewDaemon(cfg *config.Config) (*Daemon, error) {
@@ -90,6 +91,7 @@ func NewDaemon(cfg *config.Config) (*Daemon, error) {
 		lspManager:     lspManager,
 		routerInstance: routerInstance,
 		fileWatcher:    watcherInstance,
+		execSem:        make(chan struct{}, 10),
 	}
 
 	d.server = mcp.NewServer(d.registry)
@@ -229,7 +231,9 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 			return
 		}
 
+		d.execSem <- struct{}{}
 		resp := d.server.HandleRequest(&req)
+		<-d.execSem
 
 		if err := encoder.Encode(resp); err != nil {
 			return
