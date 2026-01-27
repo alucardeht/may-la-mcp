@@ -77,12 +77,7 @@ func (r *Router) QuerySymbols(ctx context.Context, path string, query string, ki
 			result.Latency = time.Since(start)
 
 			if opts.UpdateIndex && r.index != nil {
-				indexStore := r.index
-				go func() {
-					if indexStore != nil {
-						r.updateIndexFromSymbols(path, result.Items)
-					}
-				}()
+				r.updateIndexFromSymbols(path, result.Items)
 			}
 
 			log.Debug("query completed", "source", result.Source, "count", result.Count, "latency_ms", result.Latency.Milliseconds())

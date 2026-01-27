@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,7 +9,10 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/alucardeht/may-la-mcp/internal/config"
@@ -16,8 +20,24 @@ import (
 	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 )
 
+const (
+	readTimeout        = 30 * time.Second
+	stdinCheckInterval = 5 * time.Second
+)
+
 func main() {
 	cfg := config.Load()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGPIPE)
+	go func() {
+		sig := <-sigChan
+		log.Printf("CLI received signal %v, shutting down", sig)
+		cancel()
+	}()
 
 	conn, err := connectToDaemon(cfg.SocketPath)
 	if err != nil {
@@ -36,8 +56,10 @@ func main() {
 	defer conn.Close()
 
 	client := daemon.NewClient(conn)
-	if err := handleStdio(client); err != nil {
-		log.Fatalf("Error handling stdio: %v", err)
+	if err := handleStdio(ctx, client); err != nil {
+		if ctx.Err() == nil {
+			log.Printf("Error handling stdio: %v", err)
+		}
 	}
 }
 
@@ -75,24 +97,95 @@ func startDaemon(cfg *config.Config) error {
 		}
 	}
 
-	return fmt.Errorf("daemon started but socket not created within %v seconds",
-		time.Duration(100*(maxRetries*(maxRetries+1))/2)*time.Millisecond/time.Second)
+	return fmt.Errorf("daemon started but socket not created")
 }
 
-func handleStdio(client *daemon.Client) error {
+type stdinReader struct {
+	ctx     context.Context
+	timeout time.Duration
+}
+
+func newStdinReader(ctx context.Context, timeout time.Duration) *stdinReader {
+	return &stdinReader{
+		ctx:     ctx,
+		timeout: timeout,
+	}
+}
+
+func (r *stdinReader) readRequest(decoder *json.Decoder) (*protocol.JSONRPCRequest, error) {
+	type result struct {
+		req *protocol.JSONRPCRequest
+		err error
+	}
+
+	resultChan := make(chan result, 1)
+
+	go func() {
+		var req protocol.JSONRPCRequest
+		err := decoder.Decode(&req)
+		resultChan <- result{&req, err}
+	}()
+
+	ticker := time.NewTicker(stdinCheckInterval)
+	defer ticker.Stop()
+
+	timeoutTimer := time.NewTimer(r.timeout)
+	defer timeoutTimer.Stop()
+
+	for {
+		select {
+		case <-r.ctx.Done():
+			return nil, r.ctx.Err()
+
+		case res := <-resultChan:
+			if res.err != nil {
+				return nil, res.err
+			}
+			return res.req, nil
+
+		case <-ticker.C:
+			if !isStdinValid() {
+				return nil, io.EOF
+			}
+
+		case <-timeoutTimer.C:
+			if !isStdinValid() {
+				return nil, io.EOF
+			}
+			timeoutTimer.Reset(r.timeout)
+		}
+	}
+}
+
+func isStdinValid() bool {
+	_, err := os.Stdin.Stat()
+	return err == nil
+}
+
+func handleStdio(ctx context.Context, client *daemon.Client) error {
 	decoder := json.NewDecoder(os.Stdin)
 	encoder := json.NewEncoder(os.Stdout)
 
+	reader := newStdinReader(ctx, readTimeout)
+
+	var writeMu sync.Mutex
+
 	for {
-		var req protocol.JSONRPCRequest
-		if err := decoder.Decode(&req); err != nil {
-			if err == io.EOF {
-				break
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		req, err := reader.readRequest(decoder)
+		if err != nil {
+			if err == io.EOF || err == context.Canceled {
+				return nil
 			}
 			return fmt.Errorf("failed to decode request: %w", err)
 		}
 
-		resp, err := client.SendRequest(&req)
+		resp, err := client.SendRequest(req)
 		if err != nil {
 			if req.ID != nil {
 				errResp := &protocol.JSONRPCResponse{
@@ -103,19 +196,23 @@ func handleStdio(client *daemon.Client) error {
 						Message: err.Error(),
 					},
 				}
-				if err := encoder.Encode(errResp); err != nil {
-					return err
+				writeMu.Lock()
+				encodeErr := encoder.Encode(errResp)
+				writeMu.Unlock()
+				if encodeErr != nil {
+					return nil
 				}
 			}
 			continue
 		}
 
 		if req.ID != nil {
-			if err := encoder.Encode(resp); err != nil {
-				return err
+			writeMu.Lock()
+			err := encoder.Encode(resp)
+			writeMu.Unlock()
+			if err != nil {
+				return nil
 			}
 		}
 	}
-
-	return nil
 }

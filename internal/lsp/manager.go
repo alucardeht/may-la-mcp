@@ -30,6 +30,8 @@ type Manager struct {
 	lastAccess map[Language]time.Time
 
 	mu       sync.RWMutex
+	timerMu  sync.Mutex
+	startMu  sync.Mutex
 	closed   bool
 	closedCh chan struct{}
 }
@@ -96,92 +98,89 @@ func (m *Manager) GetSymbols(ctx context.Context, path string) ([]DocumentSymbol
 }
 
 func (m *Manager) getOrStartProcess(ctx context.Context, lang Language, rootPath string) (*Process, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	m.mu.RLock()
 	if proc, exists := m.processes[lang]; exists {
-		state := proc.State()
-		if state == StateReady {
-			if proc.RootPath() == rootPath {
-				log.Debug("reusing LSP", "language", lang)
-				return proc, nil
-			}
-			stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			proc.Stop(stopCtx)
-			cancel()
-		} else if state == StateStarting || state == StateInitializing {
+		if proc.State() == StateReady && proc.RootPath() == rootPath {
+			m.mu.RUnlock()
 			return proc, nil
+		}
+	}
+	m.mu.RUnlock()
+
+	m.startMu.Lock()
+	defer m.startMu.Unlock()
+
+	m.mu.Lock()
+	if proc, exists := m.processes[lang]; exists {
+		if proc.State() == StateReady && proc.RootPath() == rootPath {
+			m.mu.Unlock()
+			return proc, nil
+		}
+		if oldProc := m.processes[lang]; oldProc != nil {
+			if oldProc.State() == StateReady {
+				stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				oldProc.Stop(stopCtx)
+				cancel()
+			}
+			delete(m.processes, lang)
 		}
 	}
 
 	if m.starting[lang] {
-		return nil, errors.New("process already starting for language: " + string(lang))
-	}
+		m.mu.Unlock()
 
-	runningCount := 0
-	for _, p := range m.processes {
-		if p.State() == StateReady {
-			runningCount++
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		timeout := time.After(15 * time.Second)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-ticker.C:
+				m.mu.RLock()
+				if proc, exists := m.processes[lang]; exists && proc.State() == StateReady && proc.RootPath() == rootPath {
+					m.mu.RUnlock()
+					return proc, nil
+				}
+				if !m.starting[lang] {
+					m.mu.RUnlock()
+					return nil, fmt.Errorf("LSP for %s failed to start", lang)
+				}
+				m.mu.RUnlock()
+			case <-timeout:
+				return nil, fmt.Errorf("timeout waiting for LSP %s to start", lang)
+			}
 		}
 	}
-
-	if runningCount >= m.config.MaxConcurrent {
-		if err := m.stopOldestProcess(ctx); err != nil {
-			return nil, fmt.Errorf("at max concurrent (%d) and cannot stop idle process: %w",
-				m.config.MaxConcurrent, err)
-		}
-	}
+	m.starting[lang] = true
+	m.mu.Unlock()
 
 	serverConfig, ok := m.config.Servers[lang]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrLanguageNotSupported, lang)
+		m.mu.Lock()
+		delete(m.starting, lang)
+		m.mu.Unlock()
+		return nil, fmt.Errorf("no server configured for language: %s", lang)
 	}
 
 	proc := NewProcess(serverConfig)
-	m.processes[lang] = proc
-	m.starting[lang] = true
-
-	m.mu.Unlock()
-
 	log.Info("starting LSP", "language", lang, "root", rootPath)
-
 	err := proc.Start(ctx, rootPath)
+
 	m.mu.Lock()
-
-	m.starting[lang] = false
-
+	delete(m.starting, lang)
 	if err != nil {
-		delete(m.processes, lang)
-		log.Error("failed to start LSP", "language", lang, "error", err)
-		return nil, err
+		m.mu.Unlock()
+		return nil, fmt.Errorf("failed to start LSP: %w", err)
 	}
-
+	m.processes[lang] = proc
 	m.setupIdleTimer(lang)
+	m.mu.Unlock()
 
 	return proc, nil
 }
 
-func (m *Manager) stopOldestProcess(ctx context.Context) error {
-	var oldestLang Language
-	var oldestTime time.Time
-
-	for lang, t := range m.lastAccess {
-		if proc, exists := m.processes[lang]; exists {
-			if proc.State() == StateReady {
-				if oldestTime.IsZero() || t.Before(oldestTime) {
-					oldestTime = t
-					oldestLang = lang
-				}
-			}
-		}
-	}
-
-	if oldestLang == "" {
-		return errors.New("no idle process to stop")
-	}
-
-	return m.stopProcessLocked(ctx, oldestLang)
-}
 
 func (m *Manager) stopProcessLocked(ctx context.Context, lang Language) error {
 	proc, exists := m.processes[lang]
@@ -191,10 +190,12 @@ func (m *Manager) stopProcessLocked(ctx context.Context, lang Language) error {
 
 	log.Info("stopping LSP", "language", lang, "reason", "idle")
 
+	m.timerMu.Lock()
 	if timer, exists := m.idleTimers[lang]; exists {
 		timer.Stop()
 		delete(m.idleTimers, lang)
 	}
+	m.timerMu.Unlock()
 
 	stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -210,6 +211,9 @@ func (m *Manager) stopProcessLocked(ctx context.Context, lang Language) error {
 }
 
 func (m *Manager) setupIdleTimer(lang Language) {
+	m.timerMu.Lock()
+	defer m.timerMu.Unlock()
+
 	if timer, exists := m.idleTimers[lang]; exists {
 		timer.Stop()
 	}
@@ -232,9 +236,9 @@ func (m *Manager) setupIdleTimer(lang Language) {
 
 func (m *Manager) recordAccess(lang Language) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	m.lastAccess[lang] = time.Now()
+	m.mu.Unlock()
+
 	m.setupIdleTimer(lang)
 }
 
@@ -276,18 +280,26 @@ func (m *Manager) StopAll(ctx context.Context) error {
 
 func (m *Manager) Close() error {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.closed {
-		m.mu.Unlock()
 		return nil
 	}
 	m.closed = true
 	close(m.closedCh)
-	m.mu.Unlock()
+
+	log.Info("stopping all LSP processes")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	return m.StopAll(ctx)
+	var lastErr error
+	for lang := range m.processes {
+		if err := m.stopProcessLocked(ctx, lang); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 func (m *Manager) isClosed() bool {
