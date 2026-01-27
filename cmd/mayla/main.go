@@ -21,8 +21,7 @@ import (
 )
 
 const (
-	readTimeout        = 30 * time.Second
-	stdinCheckInterval = 5 * time.Second
+	readTimeout = 5 * time.Minute
 )
 
 func main() {
@@ -32,7 +31,7 @@ func main() {
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGPIPE)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		sig := <-sigChan
 		log.Printf("CLI received signal %v, shutting down", sig)
@@ -126,9 +125,6 @@ func (r *stdinReader) readRequest(decoder *json.Decoder) (*protocol.JSONRPCReque
 		resultChan <- result{&req, err}
 	}()
 
-	ticker := time.NewTicker(stdinCheckInterval)
-	defer ticker.Stop()
-
 	timeoutTimer := time.NewTimer(r.timeout)
 	defer timeoutTimer.Stop()
 
@@ -143,23 +139,10 @@ func (r *stdinReader) readRequest(decoder *json.Decoder) (*protocol.JSONRPCReque
 			}
 			return res.req, nil
 
-		case <-ticker.C:
-			if !isStdinValid() {
-				return nil, io.EOF
-			}
-
 		case <-timeoutTimer.C:
-			if !isStdinValid() {
-				return nil, io.EOF
-			}
 			timeoutTimer.Reset(r.timeout)
 		}
 	}
-}
-
-func isStdinValid() bool {
-	_, err := os.Stdin.Stat()
-	return err == nil
 }
 
 func handleStdio(ctx context.Context, client *daemon.Client) error {
