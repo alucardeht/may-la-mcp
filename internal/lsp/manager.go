@@ -127,7 +127,30 @@ func (m *Manager) getOrStartProcess(ctx context.Context, lang Language, rootPath
 
 	if m.starting[lang] {
 		m.mu.Unlock()
-		return nil, fmt.Errorf("LSP for %s is already starting", lang)
+
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		timeout := time.After(15 * time.Second)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-ticker.C:
+				m.mu.RLock()
+				if proc, exists := m.processes[lang]; exists && proc.State() == StateReady && proc.RootPath() == rootPath {
+					m.mu.RUnlock()
+					return proc, nil
+				}
+				if !m.starting[lang] {
+					m.mu.RUnlock()
+					return nil, fmt.Errorf("LSP for %s failed to start", lang)
+				}
+				m.mu.RUnlock()
+			case <-timeout:
+				return nil, fmt.Errorf("timeout waiting for LSP %s to start", lang)
+			}
+		}
 	}
 	m.starting[lang] = true
 	m.mu.Unlock()

@@ -24,6 +24,7 @@ import (
 	"github.com/alucardeht/may-la-mcp/internal/tools/memory"
 	"github.com/alucardeht/may-la-mcp/internal/tools/search"
 	"github.com/alucardeht/may-la-mcp/internal/watcher"
+	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 )
 
 var log = logger.ForComponent("daemon")
@@ -222,6 +223,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.connMu.Unlock()
 	}()
 
+	conn.SetDeadline(time.Now().Add(5 * time.Minute))
+
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)
 
@@ -231,12 +234,25 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 			return
 		}
 
-		d.execSem <- struct{}{}
-		resp := d.server.HandleRequest(&req)
-		<-d.execSem
-
-		if err := encoder.Encode(resp); err != nil {
-			return
+		select {
+		case d.execSem <- struct{}{}:
+			resp := d.server.HandleRequest(&req)
+			<-d.execSem
+			if err := encoder.Encode(resp); err != nil {
+				return
+			}
+		case <-time.After(30 * time.Second):
+			busyResp := &mcp.Response{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Error: &protocol.JSONRPCError{
+					Code:    -32603,
+					Message: "server busy, try again later",
+				},
+			}
+			if err := encoder.Encode(busyResp); err != nil {
+				return
+			}
 		}
 	}
 }
