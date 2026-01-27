@@ -17,16 +17,17 @@ import (
 var log = logger.ForComponent("watcher")
 
 type Watcher struct {
-	config     WatcherConfig
-	fsWatcher  *fsnotify.Watcher
-	debouncer  *Debouncer
-	classifier *EventClassifier
-	indexer    *index.IndexWorker
-	roots      []string
-	mu         sync.RWMutex
-	running    bool
-	ctx        context.Context
-	cancel     context.CancelFunc
+	config      WatcherConfig
+	fsWatcher   *fsnotify.Watcher
+	fsWatcherMu sync.Mutex
+	debouncer   *Debouncer
+	classifier  *EventClassifier
+	indexer     *index.IndexWorker
+	roots       []string
+	mu          sync.RWMutex
+	running     bool
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 func New(config WatcherConfig, indexer *index.IndexWorker) (*Watcher, error) {
@@ -48,17 +49,28 @@ func New(config WatcherConfig, indexer *index.IndexWorker) (*Watcher, error) {
 	return w, nil
 }
 
+func (w *Watcher) addToWatcher(path string) error {
+	w.fsWatcherMu.Lock()
+	defer w.fsWatcherMu.Unlock()
+	return w.fsWatcher.Add(path)
+}
+
+func (w *Watcher) removeFromWatcher(path string) {
+	w.fsWatcherMu.Lock()
+	defer w.fsWatcherMu.Unlock()
+	w.fsWatcher.Remove(path)
+}
+
 func (w *Watcher) AddRoot(path string) error {
 	log.Info("adding root to watch", "path", path)
 
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if err := w.fsWatcher.Add(path); err != nil {
+	if err := w.addToWatcher(path); err != nil {
 		return err
 	}
 
+	w.mu.Lock()
 	w.roots = append(w.roots, path)
+	w.mu.Unlock()
 
 	if err := w.walkAndAdd(path); err != nil {
 		return err
@@ -83,7 +95,7 @@ func (w *Watcher) walkAndAdd(path string) error {
 		}
 
 		if entry.IsDir() {
-			if err := w.fsWatcher.Add(fullPath); err != nil {
+			if err := w.addToWatcher(fullPath); err != nil {
 				log.Debug("failed to watch directory", "path", fullPath, "error", err)
 				continue
 			}
@@ -106,10 +118,10 @@ func (w *Watcher) walkAndAdd(path string) error {
 }
 
 func (w *Watcher) RemoveRoot(path string) error {
+	w.removeFromWatcher(path)
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
-
-	w.fsWatcher.Remove(path)
 
 	for i, root := range w.roots {
 		if root == path {
@@ -155,8 +167,9 @@ func (w *Watcher) handleEvents() {
 			if event.Has(fsnotify.Create) {
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 					if !w.shouldIgnore(event.Name) {
-						w.fsWatcher.Add(event.Name)
-						w.walkAndAdd(event.Name)
+						if err := w.addToWatcher(event.Name); err == nil {
+							w.walkAndAdd(event.Name)
+						}
 					}
 				}
 			}
@@ -261,6 +274,9 @@ func (w *Watcher) Stop() error {
 	w.mu.Unlock()
 
 	w.debouncer.Stop()
+
+	w.fsWatcherMu.Lock()
+	defer w.fsWatcherMu.Unlock()
 	return w.fsWatcher.Close()
 }
 
