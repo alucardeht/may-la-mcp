@@ -30,6 +30,7 @@ type Manager struct {
 	lastAccess map[Language]time.Time
 
 	mu       sync.RWMutex
+	timerMu  sync.Mutex
 	startMu  sync.Mutex
 	closed   bool
 	closedCh chan struct{}
@@ -189,10 +190,12 @@ func (m *Manager) stopProcessLocked(ctx context.Context, lang Language) error {
 
 	log.Info("stopping LSP", "language", lang, "reason", "idle")
 
+	m.timerMu.Lock()
 	if timer, exists := m.idleTimers[lang]; exists {
 		timer.Stop()
 		delete(m.idleTimers, lang)
 	}
+	m.timerMu.Unlock()
 
 	stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -208,6 +211,9 @@ func (m *Manager) stopProcessLocked(ctx context.Context, lang Language) error {
 }
 
 func (m *Manager) setupIdleTimer(lang Language) {
+	m.timerMu.Lock()
+	defer m.timerMu.Unlock()
+
 	if timer, exists := m.idleTimers[lang]; exists {
 		timer.Stop()
 	}
@@ -230,9 +236,9 @@ func (m *Manager) setupIdleTimer(lang Language) {
 
 func (m *Manager) recordAccess(lang Language) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	m.lastAccess[lang] = time.Now()
+	m.mu.Unlock()
+
 	m.setupIdleTimer(lang)
 }
 
