@@ -7,6 +7,7 @@ import (
 
 	"github.com/alucardeht/may-la-mcp/internal/tools"
 	"github.com/alucardeht/may-la-mcp/pkg/protocol"
+	"github.com/alucardeht/may-la-mcp/pkg/version"
 )
 
 type Handler struct {
@@ -104,21 +105,19 @@ func (h *Handler) handleInitialize(req *Request) (interface{}, error) {
 		},
 		"serverInfo": map[string]interface{}{
 			"name":    "May-la MCP Server",
-			"version": "0.1.0",
+			"version": version.Version,
 		},
 	}, nil
 }
 
 func negotiateProtocolVersion(clientVersion string) string {
-	supportedVersions := []string{"2025-11-25", "2024-11-05"}
-
-	for _, version := range supportedVersions {
-		if clientVersion == version {
-			return version
+	for _, v := range version.SupportedProtocolVersions {
+		if clientVersion == v {
+			return v
 		}
 	}
 
-	return "2025-11-25"
+	return version.ProtocolVersion
 }
 
 func (h *Handler) handleListTools() interface{} {
