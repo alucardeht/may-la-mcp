@@ -1,38 +1,46 @@
 package daemon
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 )
 
 type Client struct {
-	conn net.Conn
+	conn    net.Conn
+	writer  *bufio.Writer
+	encoder *json.Encoder
+	decoder *json.Decoder
+	mu      sync.Mutex
 }
 
 func NewClient(conn net.Conn) *Client {
+	writer := bufio.NewWriter(conn)
 	return &Client{
-		conn: conn,
+		conn:    conn,
+		writer:  writer,
+		encoder: json.NewEncoder(writer),
+		decoder: json.NewDecoder(conn),
 	}
 }
 
 func (c *Client) SendRequest(req *protocol.JSONRPCRequest) (*protocol.JSONRPCResponse, error) {
-	data, err := json.Marshal(req)
-	if err != nil {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.encoder.Encode(req); err != nil {
+		return nil, err
+	}
+	if err := c.writer.Flush(); err != nil {
 		return nil, err
 	}
 
-	data = append(data, '\n')
-
-	if _, err := c.conn.Write(data); err != nil {
-		return nil, err
-	}
-
-	decoder := json.NewDecoder(c.conn)
 	var resp protocol.JSONRPCResponse
-	if err := decoder.Decode(&resp); err != nil {
+	if err := c.decoder.Decode(&resp); err != nil {
 		return nil, err
 	}
 

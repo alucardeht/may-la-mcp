@@ -12,12 +12,21 @@ import (
 type Handler struct {
 	registry  *tools.Registry
 	startTime time.Time
+	initialized bool
+	clientInfo ClientInfo
+}
+
+type ClientInfo struct {
+	Name    string
+	Version string
 }
 
 func NewHandler(registry *tools.Registry) *Handler {
 	return &Handler{
-		registry:  registry,
-		startTime: time.Now(),
+		registry:    registry,
+		startTime:   time.Now(),
+		initialized: false,
+		clientInfo:  ClientInfo{},
 	}
 }
 
@@ -29,7 +38,17 @@ func (h *Handler) Handle(req *Request) *Response {
 
 	switch req.Method {
 	case "initialize":
-		resp.Result = h.handleInitialize()
+		result, err := h.handleInitialize(req)
+		if err != nil {
+			resp.Error = &protocol.JSONRPCError{
+				Code:    -32603,
+				Message: err.Error(),
+			}
+		} else {
+			resp.Result = result
+		}
+	case "ping":
+		resp.Result = map[string]interface{}{}
 	case "tools/list":
 		resp.Result = h.handleListTools()
 	case "tools/call":
@@ -42,6 +61,9 @@ func (h *Handler) Handle(req *Request) *Response {
 		} else {
 			resp.Result = result
 		}
+	case "notifications/initialized":
+		h.handleInitializedNotification(req)
+		resp.Result = map[string]interface{}{}
 	default:
 		resp.Error = &protocol.JSONRPCError{
 			Code:    -32601,
@@ -52,9 +74,31 @@ func (h *Handler) Handle(req *Request) *Response {
 	return resp
 }
 
-func (h *Handler) handleInitialize() interface{} {
+func (h *Handler) handleInitialize(req *Request) (interface{}, error) {
+	initReq := struct {
+		ProtocolVersion string `json:"protocolVersion"`
+		ClientInfo struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		} `json:"clientInfo"`
+	}{}
+
+	paramsData, err := json.Marshal(req.Params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal params: %w", err)
+	}
+
+	if err := json.Unmarshal(paramsData, &initReq); err != nil {
+		return nil, fmt.Errorf("failed to parse initialize request: %w", err)
+	}
+
+	h.clientInfo.Name = initReq.ClientInfo.Name
+	h.clientInfo.Version = initReq.ClientInfo.Version
+
+	negotiatedVersion := negotiateProtocolVersion(initReq.ProtocolVersion)
+
 	return map[string]interface{}{
-		"protocolVersion": "2025-11-25",
+		"protocolVersion": negotiatedVersion,
 		"capabilities": map[string]interface{}{
 			"tools": map[string]interface{}{},
 		},
@@ -62,7 +106,19 @@ func (h *Handler) handleInitialize() interface{} {
 			"name":    "May-la MCP Server",
 			"version": "0.1.0",
 		},
+	}, nil
+}
+
+func negotiateProtocolVersion(clientVersion string) string {
+	supportedVersions := []string{"2025-11-25", "2024-11-05"}
+
+	for _, version := range supportedVersions {
+		if clientVersion == version {
+			return version
+		}
 	}
+
+	return "2025-11-25"
 }
 
 func (h *Handler) handleListTools() interface{} {
@@ -96,6 +152,10 @@ func (h *Handler) handleListTools() interface{} {
 	return map[string]interface{}{
 		"tools": toolsData,
 	}
+}
+
+func (h *Handler) handleInitializedNotification(req *Request) {
+	h.initialized = true
 }
 
 func (h *Handler) handleCallTool(req *Request) (interface{}, error) {

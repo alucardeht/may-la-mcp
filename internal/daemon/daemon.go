@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -225,34 +226,117 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 
 	conn.SetDeadline(time.Now().Add(5 * time.Minute))
 
+	writer := bufio.NewWriter(conn)
 	decoder := json.NewDecoder(conn)
-	encoder := json.NewEncoder(conn)
+	encoder := json.NewEncoder(writer)
 
 	for {
-		var req mcp.Request
-		if err := decoder.Decode(&req); err != nil {
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
 			return
 		}
 
-		select {
-		case d.execSem <- struct{}{}:
-			resp := d.server.HandleRequest(&req)
-			<-d.execSem
-			if err := encoder.Encode(resp); err != nil {
-				return
+		if len(raw) == 0 {
+			continue
+		}
+
+		if raw[0] == '[' {
+			d.handleBatch(raw, encoder, writer)
+		} else {
+			d.handleSingleRequest(raw, encoder, writer)
+		}
+	}
+}
+
+func (d *Daemon) handleBatch(raw json.RawMessage, encoder *json.Encoder, writer *bufio.Writer) {
+	var batch []mcp.Request
+	if err := json.Unmarshal(raw, &batch); err != nil {
+		errResp := &mcp.Response{
+			JSONRPC: "2.0",
+			ID:      nil,
+			Error: &protocol.JSONRPCError{
+				Code:    -32700,
+				Message: "Parse error",
+			},
+		}
+		encoder.Encode(errResp)
+		writer.Flush()
+		return
+	}
+
+	select {
+	case d.execSem <- struct{}{}:
+		responses := d.server.HandleBatch(batch)
+		<-d.execSem
+		if err := encoder.Encode(responses); err != nil {
+			return
+		}
+		if err := writer.Flush(); err != nil {
+			return
+		}
+	case <-time.After(30 * time.Second):
+		busyResps := make([]*mcp.Response, len(batch))
+		for i, req := range batch {
+			if req.ID != nil {
+				busyResps[i] = &mcp.Response{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Error: &protocol.JSONRPCError{
+						Code:    -32603,
+						Message: "server busy, try again later",
+					},
+				}
 			}
-		case <-time.After(30 * time.Second):
-			busyResp := &mcp.Response{
-				JSONRPC: "2.0",
-				ID:      req.ID,
-				Error: &protocol.JSONRPCError{
-					Code:    -32603,
-					Message: "server busy, try again later",
-				},
-			}
-			if err := encoder.Encode(busyResp); err != nil {
-				return
-			}
+		}
+		if err := encoder.Encode(busyResps); err != nil {
+			return
+		}
+		if err := writer.Flush(); err != nil {
+			return
+		}
+	}
+}
+
+func (d *Daemon) handleSingleRequest(raw json.RawMessage, encoder *json.Encoder, writer *bufio.Writer) {
+	var req mcp.Request
+	if err := json.Unmarshal(raw, &req); err != nil {
+		errResp := &mcp.Response{
+			JSONRPC: "2.0",
+			ID:      nil,
+			Error: &protocol.JSONRPCError{
+				Code:    -32700,
+				Message: "Parse error",
+			},
+		}
+		encoder.Encode(errResp)
+		writer.Flush()
+		return
+	}
+
+	select {
+	case d.execSem <- struct{}{}:
+		resp := d.server.HandleRequest(&req)
+		<-d.execSem
+		if err := encoder.Encode(resp); err != nil {
+			return
+		}
+		if err := writer.Flush(); err != nil {
+			return
+		}
+	case <-time.After(30 * time.Second):
+		busyResp := &mcp.Response{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Error: &protocol.JSONRPCError{
+				Code:    -32603,
+				Message: "server busy, try again later",
+			},
+		}
+		if err := encoder.Encode(busyResp); err != nil {
+			return
+		}
+		if err := writer.Flush(); err != nil {
+			return
 		}
 	}
 }
