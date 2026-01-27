@@ -222,27 +222,31 @@ func (m *Manager) setupIdleTimer(lang Language) {
 
 	m.idleTimers[lang] = time.AfterFunc(m.config.IdleTimeout, func() {
 		m.mu.Lock()
-		defer m.mu.Unlock()
-
-		if lastAccess, exists := m.lastAccess[lang]; exists {
-			if time.Since(lastAccess) >= m.config.IdleTimeout {
-				proc, procExists := m.processes[lang]
-				if !procExists {
-					return
-				}
-
-				log.Info("stopping LSP", "language", lang, "reason", "idle")
-
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				if err := proc.Stop(ctx); err != nil {
-					proc.Kill()
-				}
-				cancel()
-
-				delete(m.processes, lang)
-				delete(m.lastAccess, lang)
-			}
+		lastAccess, accessExists := m.lastAccess[lang]
+		if !accessExists {
+			m.mu.Unlock()
+			return
 		}
+		if time.Since(lastAccess) < m.config.IdleTimeout {
+			m.mu.Unlock()
+			return
+		}
+		proc, procExists := m.processes[lang]
+		if !procExists {
+			m.mu.Unlock()
+			return
+		}
+		delete(m.processes, lang)
+		delete(m.lastAccess, lang)
+		m.mu.Unlock()
+
+		log.Info("stopping LSP", "language", lang, "reason", "idle")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := proc.Stop(ctx); err != nil {
+			proc.Kill()
+		}
+		cancel()
 	})
 }
 

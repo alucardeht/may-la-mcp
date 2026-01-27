@@ -93,7 +93,7 @@ func NewDaemon(cfg *config.Config) (*Daemon, error) {
 		lspManager:     lspManager,
 		routerInstance: routerInstance,
 		fileWatcher:    watcherInstance,
-		execSem:        make(chan struct{}, 10),
+		execSem:        make(chan struct{}, 50),
 	}
 
 	d.server = mcp.NewServer(d.registry)
