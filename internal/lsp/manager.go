@@ -157,27 +157,6 @@ func (m *Manager) getOrStartProcess(ctx context.Context, lang Language, rootPath
 	return proc, nil
 }
 
-func (m *Manager) stopOldestProcess(ctx context.Context) error {
-	var oldestLang Language
-	var oldestTime time.Time
-
-	for lang, t := range m.lastAccess {
-		if proc, exists := m.processes[lang]; exists {
-			if proc.State() == StateReady {
-				if oldestTime.IsZero() || t.Before(oldestTime) {
-					oldestTime = t
-					oldestLang = lang
-				}
-			}
-		}
-	}
-
-	if oldestLang == "" {
-		return errors.New("no idle process to stop")
-	}
-
-	return m.stopProcessLocked(ctx, oldestLang)
-}
 
 func (m *Manager) stopProcessLocked(ctx context.Context, lang Language) error {
 	proc, exists := m.processes[lang]
@@ -272,18 +251,26 @@ func (m *Manager) StopAll(ctx context.Context) error {
 
 func (m *Manager) Close() error {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.closed {
-		m.mu.Unlock()
 		return nil
 	}
 	m.closed = true
 	close(m.closedCh)
-	m.mu.Unlock()
+
+	log.Info("stopping all LSP processes")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	return m.StopAll(ctx)
+	var lastErr error
+	for lang := range m.processes {
+		if err := m.stopProcessLocked(ctx, lang); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 func (m *Manager) isClosed() bool {
