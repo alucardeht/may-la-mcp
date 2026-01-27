@@ -13,7 +13,8 @@ level = "info"
 format = "json"
 output = "stderr"
 
+# NOTE: Server version comes from build-time ldflags, not this file
 [server]
-protocol_version = "2024-11-05"
+protocol_version = "2025-11-25"
 name = "May-la MCP Server"
 version = "0.1.0"

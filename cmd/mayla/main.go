@@ -122,32 +122,29 @@ func (r *stdinReader) readRequest(decoder *json.Decoder) (*protocol.JSONRPCReque
 	go func() {
 		var req protocol.JSONRPCRequest
 		err := decoder.Decode(&req)
-		resultChan <- result{&req, err}
+		select {
+		case resultChan <- result{&req, err}:
+		default:
+		}
 	}()
 
 	timeoutTimer := time.NewTimer(r.timeout)
 	defer timeoutTimer.Stop()
 
-	for {
-		select {
-		case <-r.ctx.Done():
-			return nil, r.ctx.Err()
-
-		case res := <-resultChan:
-			if res.err != nil {
-				return nil, res.err
-			}
-			return res.req, nil
-
-		case <-timeoutTimer.C:
-			timeoutTimer.Reset(r.timeout)
-		}
+	select {
+	case <-r.ctx.Done():
+		return nil, r.ctx.Err()
+	case res := <-resultChan:
+		return res.req, res.err
+	case <-timeoutTimer.C:
+		return nil, context.DeadlineExceeded
 	}
 }
 
 func handleStdio(ctx context.Context, client *daemon.Client) error {
 	decoder := json.NewDecoder(os.Stdin)
-	encoder := json.NewEncoder(os.Stdout)
+	writer := protocol.NewFlushWriter(os.Stdout)
+	encoder := json.NewEncoder(writer)
 
 	reader := newStdinReader(ctx, readTimeout)
 
@@ -181,6 +178,9 @@ func handleStdio(ctx context.Context, client *daemon.Client) error {
 				}
 				writeMu.Lock()
 				encodeErr := encoder.Encode(errResp)
+				if encodeErr == nil {
+					writer.Flush()
+				}
 				writeMu.Unlock()
 				if encodeErr != nil {
 					return nil
@@ -192,6 +192,9 @@ func handleStdio(ctx context.Context, client *daemon.Client) error {
 		if req.ID != nil {
 			writeMu.Lock()
 			err := encoder.Encode(resp)
+			if err == nil {
+				writer.Flush()
+			}
 			writeMu.Unlock()
 			if err != nil {
 				return nil

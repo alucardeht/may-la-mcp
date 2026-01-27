@@ -261,9 +261,6 @@ func (s *IndexStore) UpdateFileStatus(path string, status FileStatus, errorMsg s
 }
 
 func (s *IndexStore) InsertSymbols(fileID int64, symbols []*IndexedSymbol) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)

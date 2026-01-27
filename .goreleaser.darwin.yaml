@@ -19,6 +19,9 @@ builds:
       - -tags=sqlite_fts5
     ldflags:
       - -s -w
+      - -X github.com/alucardeht/may-la-mcp/pkg/version.Version={{ .Version }}
+      - -X github.com/alucardeht/may-la-mcp/pkg/version.Commit={{ .Commit }}
+      - -X github.com/alucardeht/may-la-mcp/pkg/version.BuildDate={{ .Date }}
 
   - id: mayla-daemon-darwin
     main: ./cmd/mayla-daemon
@@ -34,6 +37,9 @@ builds:
       - -tags=sqlite_fts5
     ldflags:
       - -s -w
+      - -X github.com/alucardeht/may-la-mcp/pkg/version.Version={{ .Version }}
+      - -X github.com/alucardeht/may-la-mcp/pkg/version.Commit={{ .Commit }}
+      - -X github.com/alucardeht/may-la-mcp/pkg/version.BuildDate={{ .Date }}
 
 archives:
   - id: darwin

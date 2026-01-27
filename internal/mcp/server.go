@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bufio"
 	"encoding/json"
 	"io"
 
@@ -25,18 +24,27 @@ func (s *Server) HandleRequest(req *Request) *Response {
 	return s.handler.Handle(req)
 }
 
+func (s *Server) HandleBatch(batch []Request) []*Response {
+	responses := make([]*Response, 0, len(batch))
+	for _, req := range batch {
+		resp := s.HandleRequest(&req)
+		if req.ID != nil {
+			responses = append(responses, resp)
+		}
+	}
+	return responses
+}
+
 func (s *Server) ProcessStream(reader io.Reader, writer io.Writer) error {
-	scanner := bufio.NewScanner(reader)
+	decoder := json.NewDecoder(reader)
 	encoder := json.NewEncoder(writer)
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-
-		var req Request
-		if err := json.Unmarshal(line, &req); err != nil {
+	for {
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			if err == io.EOF {
+				return nil
+			}
 			resp := &Response{
 				JSONRPC: "2.0",
 				ID:      nil,
@@ -49,13 +57,50 @@ func (s *Server) ProcessStream(reader io.Reader, writer io.Writer) error {
 			continue
 		}
 
-		resp := s.HandleRequest(&req)
-		if err := encoder.Encode(resp); err != nil {
-			return err
+		if len(raw) == 0 {
+			continue
+		}
+
+		if raw[0] == '[' {
+			var batch []Request
+			if err := json.Unmarshal(raw, &batch); err != nil {
+				resp := &Response{
+					JSONRPC: "2.0",
+					ID:      nil,
+					Error: &protocol.JSONRPCError{
+						Code:    -32700,
+						Message: "Parse error",
+					},
+				}
+				encoder.Encode(resp)
+				continue
+			}
+
+			responses := s.HandleBatch(batch)
+			if err := encoder.Encode(responses); err != nil {
+				return err
+			}
+		} else {
+			var req Request
+			if err := json.Unmarshal(raw, &req); err != nil {
+				resp := &Response{
+					JSONRPC: "2.0",
+					ID:      nil,
+					Error: &protocol.JSONRPCError{
+						Code:    -32700,
+						Message: "Parse error",
+					},
+				}
+				encoder.Encode(resp)
+				continue
+			}
+
+			resp := s.HandleRequest(&req)
+			if err := encoder.Encode(resp); err != nil {
+				return err
+			}
 		}
 	}
-
-	return scanner.Err()
 }
 
 func (s *Server) Registry() *tools.Registry {
