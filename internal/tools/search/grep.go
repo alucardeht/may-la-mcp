@@ -12,6 +12,8 @@ import (
 	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
 
+const MaxGrepFileSize = 100 * 1024 * 1024
+
 type SearchRequest struct {
 	Pattern       string `json:"pattern"`
 	Path          string `json:"path"`
@@ -180,6 +182,11 @@ func searchWithGo(req SearchRequest) (interface{}, error) {
 }
 
 func searchFile(filePath string, req SearchRequest, pattern *regexp.Regexp) []Match {
+	fileInfo, err := os.Stat(filePath)
+	if err == nil && fileInfo.Size() > MaxGrepFileSize {
+		return nil
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil

@@ -133,12 +133,15 @@ func (t *CreateTool) Execute(input json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("failed to create file: %w", err)
 	}
 
-	fileStat, _ := os.Stat(req.Path)
+	var size int64
+	if fileStat, err := os.Stat(req.Path); err == nil {
+		size = fileStat.Size()
+	}
 	return CreateResponse{
 		Path:    req.Path,
 		Type:    "file",
 		Created: true,
-		Size:    fileStat.Size(),
+		Size:    size,
 	}, nil
 }
 

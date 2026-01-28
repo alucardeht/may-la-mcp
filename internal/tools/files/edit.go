@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
@@ -147,11 +149,19 @@ func (t *EditTool) Execute(input json.RawMessage) (interface{}, error) {
 		newContent += "\n"
 	}
 
-	if err := os.WriteFile(req.Path, []byte(newContent), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write file: %w", err)
+	tempPath := req.Path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
+	if err := os.WriteFile(tempPath, []byte(newContent), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write temp file: %w", err)
+	}
+	if err := os.Rename(tempPath, req.Path); err != nil {
+		os.Remove(tempPath)
+		return nil, fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
-	stat, _ := os.Stat(req.Path)
+	stat, err := os.Stat(req.Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat edited file: %w", err)
+	}
 	finalLines := strings.Count(newContent, "\n")
 	if newContent == "" {
 		finalLines = 0

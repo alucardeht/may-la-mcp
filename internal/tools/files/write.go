@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/alucardeht/may-la-mcp/internal/tools"
 )
@@ -81,14 +83,14 @@ func (t *WriteTool) Execute(input json.RawMessage) (interface{}, error) {
 		fileExists = true
 
 		if req.Backup {
-			backupPath = req.Path + ".bak"
+			backupPath = req.Path + ".bak." + strconv.FormatInt(time.Now().UnixNano(), 10)
 			if err := os.Rename(req.Path, backupPath); err != nil {
 				return nil, fmt.Errorf("failed to create backup: %w", err)
 			}
 		}
 	}
 
-	tempPath := req.Path + ".tmp"
+	tempPath := req.Path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := os.WriteFile(tempPath, []byte(req.Content), 0644); err != nil {
 		if backupPath != "" {
 			os.Rename(backupPath, req.Path)
@@ -104,8 +106,10 @@ func (t *WriteTool) Execute(input json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("failed to rename file: %w", err)
 	}
 
-	stat, _ := os.Stat(req.Path)
-	size := stat.Size()
+	var size int64
+	if stat, err := os.Stat(req.Path); err == nil {
+		size = stat.Size()
+	}
 
 	return WriteResponse{
 		Size:    size,

@@ -101,17 +101,21 @@ func (t *MoveTool) Execute(input json.RawMessage) (interface{}, error) {
 		return nil, fmt.Errorf("failed to move: %w", err)
 	}
 
-	newStat, _ := os.Stat(req.Destination)
+	newStat, err := os.Stat(req.Destination)
 	itemType := "file"
-	if newStat.IsDir() {
-		itemType = "dir"
+	var size int64
+	if err == nil {
+		if newStat.IsDir() {
+			itemType = "dir"
+		}
+		size = newStat.Size()
 	}
 
 	return MoveResponse{
 		Source:      req.Source,
 		Destination: req.Destination,
 		Type:        itemType,
-		Size:        newStat.Size(),
+		Size:        size,
 	}, nil
 }
 
