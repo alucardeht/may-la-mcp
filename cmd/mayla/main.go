@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
@@ -24,32 +25,56 @@ const (
 	readTimeout = 5 * time.Minute
 )
 
+var (
+	instanceID  string
+	daemonPID   int
+	daemonCmd   *exec.Cmd
+	instanceDir string
+	cleanupOnce sync.Once
+	daemonDone  chan struct{}
+)
+
 func main() {
-	cfg := config.Load()
+	rand.Seed(time.Now().UnixNano())
+
+	instanceID = generateInstanceID()
+	daemonDone = make(chan struct{})
+
+	cfg, err := config.LoadConfigWithInstance(instanceID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	instanceDir = cfg.InstanceDir
+
+	setupCleanupHandlers()
+
+	pid, cmd, err := startDaemonForInstance(instanceID)
+	daemonPID = pid
+	daemonCmd = cmd
+	if err != nil {
+		cleanup()
+		fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := waitForDaemonReady(cfg.SocketPath, 10*time.Second); err != nil {
+		cleanup()
+		fmt.Fprintf(os.Stderr, "Daemon failed to become ready: %v\n", err)
+		os.Exit(1)
+	}
+
+	go monitorDaemon(cmd)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	go func() {
-		sig := <-sigChan
-		log.Printf("CLI received signal %v, shutting down", sig)
-		cancel()
-	}()
-
 	conn, err := connectToDaemon(cfg.SocketPath)
 	if err != nil {
-		if err := startDaemon(cfg); err != nil {
-			log.Fatalf("Failed to start daemon: %v", err)
-		}
-
-		time.Sleep(500 * time.Millisecond)
-
-		conn, err = connectToDaemon(cfg.SocketPath)
-		if err != nil {
-			log.Fatalf("Failed to connect to daemon: %v", err)
-		}
+		cleanup()
+		fmt.Fprintf(os.Stderr, "Failed to connect to daemon: %v\n", err)
+		os.Exit(1)
 	}
 
 	defer conn.Close()
@@ -60,43 +85,94 @@ func main() {
 			log.Printf("Error handling stdio: %v", err)
 		}
 	}
+
+	cleanup()
+}
+
+func generateInstanceID() string {
+	return fmt.Sprintf("%d-%d-%x", os.Getpid(), time.Now().UnixNano(), rand.Int63())
+}
+
+func startDaemonForInstance(instanceID string) (int, *exec.Cmd, error) {
+	execPath, err := os.Executable()
+	if err != nil {
+		return 0, nil, err
+	}
+	daemonPath := filepath.Join(filepath.Dir(execPath), "mayla-daemon")
+
+	cmd := exec.Command(daemonPath, instanceID)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return 0, nil, fmt.Errorf("failed to start daemon: %w", err)
+	}
+
+	return cmd.Process.Pid, cmd, nil
+}
+
+func waitForDaemonReady(socketPath string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(socketPath); err == nil {
+			time.Sleep(100 * time.Millisecond)
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	return fmt.Errorf("daemon socket not ready after %v", timeout)
+}
+
+func setupCleanupHandlers() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+
+	go func() {
+		<-sigChan
+		cleanup()
+		os.Exit(0)
+	}()
+}
+
+func monitorDaemon(cmd *exec.Cmd) {
+	err := cmd.Wait()
+	close(daemonDone)
+
+	log.Printf("Daemon process exited: %v", err)
+	cleanup()
+	os.Exit(1)
+}
+
+func cleanup() {
+	cleanupOnce.Do(func() {
+		if daemonPID > 0 {
+			killDaemon(daemonPID)
+		}
+
+		if instanceDir != "" {
+			os.RemoveAll(instanceDir)
+		}
+	})
+}
+
+func killDaemon(pid int) {
+	syscall.Kill(pid, syscall.SIGTERM)
+
+	for i := 0; i < 50; i++ {
+		if err := syscall.Kill(pid, 0); err != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	syscall.Kill(pid, syscall.SIGKILL)
 }
 
 func connectToDaemon(socketPath string) (net.Conn, error) {
 	connector := daemon.NewSocketConnector(socketPath)
 	return connector.Connect()
-}
-
-func startDaemon(cfg *config.Config) error {
-	if err := cfg.EnsureDirectories(); err != nil {
-		return err
-	}
-
-	daemonPath := filepath.Join(os.Getenv("HOME"), ".mayla", "mayla-daemon")
-	if _, err := os.Stat(daemonPath); err != nil {
-		return fmt.Errorf("mayla-daemon not found at %s: %w", daemonPath, err)
-	}
-
-	cmd := exec.Command(daemonPath)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start daemon: %w", err)
-	}
-
-	maxRetries := 10
-	for i := 0; i < maxRetries; i++ {
-		waitTime := time.Duration(100*(i+1)) * time.Millisecond
-		time.Sleep(waitTime)
-
-		if _, err := os.Stat(cfg.SocketPath); err == nil {
-			time.Sleep(100 * time.Millisecond)
-			return nil
-		}
-	}
-
-	return fmt.Errorf("daemon started but socket not created")
 }
 
 type stdinReader struct {
@@ -122,22 +198,38 @@ func (r *stdinReader) readRequest(decoder *json.Decoder) (*protocol.JSONRPCReque
 	go func() {
 		var req protocol.JSONRPCRequest
 		err := decoder.Decode(&req)
+
 		select {
 		case resultChan <- result{&req, err}:
 		default:
 		}
 	}()
 
+	if deadline, ok := r.ctx.Deadline(); ok {
+		timeout := time.Until(deadline)
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+
+		select {
+		case res := <-resultChan:
+			return res.req, res.err
+		case <-timer.C:
+			return nil, context.DeadlineExceeded
+		case <-r.ctx.Done():
+			return nil, r.ctx.Err()
+		}
+	}
+
 	timeoutTimer := time.NewTimer(r.timeout)
 	defer timeoutTimer.Stop()
 
 	select {
-	case <-r.ctx.Done():
-		return nil, r.ctx.Err()
 	case res := <-resultChan:
 		return res.req, res.err
 	case <-timeoutTimer.C:
 		return nil, context.DeadlineExceeded
+	case <-r.ctx.Done():
+		return nil, r.ctx.Err()
 	}
 }
 

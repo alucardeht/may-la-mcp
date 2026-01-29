@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -19,7 +20,19 @@ func init() {
 }
 
 func main() {
-	cfg := config.Load()
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "Error: instance ID required\n")
+		fmt.Fprintf(os.Stderr, "Usage: %s <instance-id>\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	instanceID := os.Args[1]
+	cfg, err := config.LoadConfigWithInstance(instanceID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
 	if err := cfg.EnsureDirectories(); err != nil {
 		log.Fatalf("Failed to ensure directories: %v", err)
 	}
