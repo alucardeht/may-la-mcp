@@ -81,7 +81,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, err := connectToDaemon(cfg.SocketPath)
+	conn, err := connectWithRetry(ctx, cfg.SocketPath, 5)
 	if err != nil {
 		cleanup()
 		fmt.Fprintf(os.Stderr, "Failed to connect to daemon: %v\n", err)
@@ -91,7 +91,7 @@ func main() {
 	defer conn.Close()
 
 	client := daemon.NewClient(conn)
-	if err := handleStdio(ctx, client); err != nil {
+	if err := handleStdio(ctx, client, cfg.SocketPath); err != nil {
 		if ctx.Err() == nil {
 			log.Printf("Error handling stdio: %v", err)
 		}
@@ -231,75 +231,100 @@ func killDaemon(pid int) {
 	syscall.Kill(pid, syscall.SIGKILL)
 }
 
+func connectWithRetry(ctx context.Context, socketPath string, maxRetries int) (net.Conn, error) {
+	for i := 0; i < maxRetries; i++ {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		conn, err := connectToDaemon(socketPath)
+		if err == nil {
+			return conn, nil
+		}
+
+		if i < maxRetries-1 {
+			backoffDuration := time.Duration(i+1) * 100 * time.Millisecond
+			time.Sleep(backoffDuration)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to connect after %d retries", maxRetries)
+}
+
 func connectToDaemon(socketPath string) (net.Conn, error) {
 	connector := daemon.NewSocketConnector(socketPath)
 	return connector.Connect()
 }
 
 type stdinReader struct {
-	ctx     context.Context
-	timeout time.Duration
+	decoder  *json.Decoder
+	requests chan *protocol.JSONRPCRequest
+	errors   chan error
+	done     chan struct{}
 }
 
-func newStdinReader(ctx context.Context, timeout time.Duration) *stdinReader {
-	return &stdinReader{
-		ctx:     ctx,
-		timeout: timeout,
+func newStdinReader() *stdinReader {
+	r := &stdinReader{
+		decoder:  json.NewDecoder(os.Stdin),
+		requests: make(chan *protocol.JSONRPCRequest, 10),
+		errors:   make(chan error, 10),
+		done:     make(chan struct{}),
 	}
+
+	go r.readLoop()
+
+	return r
 }
 
-func (r *stdinReader) readRequest(decoder *json.Decoder) (*protocol.JSONRPCRequest, error) {
-	type result struct {
-		req *protocol.JSONRPCRequest
-		err error
-	}
-
-	resultChan := make(chan result, 1)
-
-	go func() {
-		var req protocol.JSONRPCRequest
-		err := decoder.Decode(&req)
-
+func (r *stdinReader) readLoop() {
+	for {
 		select {
-		case resultChan <- result{&req, err}:
+		case <-r.done:
+			return
 		default:
 		}
-	}()
 
-	if deadline, ok := r.ctx.Deadline(); ok {
-		timeout := time.Until(deadline)
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
+		var req protocol.JSONRPCRequest
+		err := r.decoder.Decode(&req)
+
+		if err != nil {
+			select {
+			case r.errors <- err:
+			case <-r.done:
+				return
+			}
+			continue
+		}
 
 		select {
-		case res := <-resultChan:
-			return res.req, res.err
-		case <-timer.C:
-			return nil, context.DeadlineExceeded
-		case <-r.ctx.Done():
-			return nil, r.ctx.Err()
+		case r.requests <- &req:
+		case <-r.done:
+			return
 		}
-	}
-
-	timeoutTimer := time.NewTimer(r.timeout)
-	defer timeoutTimer.Stop()
-
-	select {
-	case res := <-resultChan:
-		return res.req, res.err
-	case <-timeoutTimer.C:
-		return nil, context.DeadlineExceeded
-	case <-r.ctx.Done():
-		return nil, r.ctx.Err()
 	}
 }
 
-func handleStdio(ctx context.Context, client *daemon.Client) error {
-	decoder := json.NewDecoder(os.Stdin)
+func (r *stdinReader) readRequest(ctx context.Context) (*protocol.JSONRPCRequest, error) {
+	select {
+	case req := <-r.requests:
+		return req, nil
+	case err := <-r.errors:
+		return nil, err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (r *stdinReader) close() {
+	close(r.done)
+}
+
+func handleStdio(ctx context.Context, client *daemon.Client, socketPath string) error {
+	reader := newStdinReader()
+	defer reader.close()
+
 	writer := protocol.NewFlushWriter(os.Stdout)
 	encoder := json.NewEncoder(writer)
-
-	reader := newStdinReader(ctx, readTimeout)
 
 	var writeMu sync.Mutex
 
@@ -310,7 +335,7 @@ func handleStdio(ctx context.Context, client *daemon.Client) error {
 		default:
 		}
 
-		req, err := reader.readRequest(decoder)
+		req, err := reader.readRequest(ctx)
 		if err != nil {
 			if err == io.EOF || err == context.Canceled {
 				return nil
@@ -320,26 +345,47 @@ func handleStdio(ctx context.Context, client *daemon.Client) error {
 
 		resp, err := client.SendRequest(req)
 		if err != nil {
-			if req.ID != nil {
-				errResp := &protocol.JSONRPCResponse{
-					JSONRPC: "2.0",
-					ID:      req.ID,
-					Error: &protocol.JSONRPCError{
-						Code:    -32603,
-						Message: err.Error(),
-					},
+			if !client.IsHealthy() {
+				log.Println("Connection unhealthy, attempting reconnect...")
+
+				if err := client.Close(); err != nil {
+					log.Printf("Error closing old connection: %v", err)
 				}
-				writeMu.Lock()
-				encodeErr := encoder.Encode(errResp)
-				if encodeErr == nil {
-					writer.Flush()
+
+				newConn, reconnErr := connectWithRetry(ctx, socketPath, 3)
+				if reconnErr != nil {
+					return fmt.Errorf("reconnection failed: %w", reconnErr)
 				}
-				writeMu.Unlock()
-				if encodeErr != nil {
-					return nil
+
+				client = daemon.NewClient(newConn)
+				log.Println("Reconnected successfully")
+
+				resp, err = client.SendRequest(req)
+				if err != nil {
+					return fmt.Errorf("request failed after reconnect: %w", err)
 				}
+			} else {
+				if req.ID != nil {
+					errResp := &protocol.JSONRPCResponse{
+						JSONRPC: "2.0",
+						ID:      req.ID,
+						Error: &protocol.JSONRPCError{
+							Code:    -32603,
+							Message: err.Error(),
+						},
+					}
+					writeMu.Lock()
+					encodeErr := encoder.Encode(errResp)
+					if encodeErr == nil {
+						writer.Flush()
+					}
+					writeMu.Unlock()
+					if encodeErr != nil {
+						return nil
+					}
+				}
+				continue
 			}
-			continue
 		}
 
 		if req.ID != nil {

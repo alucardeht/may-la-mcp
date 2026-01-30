@@ -1,16 +1,18 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 )
 
 type Tool interface {
 	Name() string
 	Description() string
 	Schema() json.RawMessage
-	Execute(input json.RawMessage) (interface{}, error)
+	Execute(ctx context.Context, input json.RawMessage) (interface{}, error)
 }
 
 type AnnotatedTool interface {
@@ -50,7 +52,7 @@ func (r *Registry) Get(name string) (Tool, bool) {
 	return tool, ok
 }
 
-func (r *Registry) Execute(name string, input json.RawMessage) (result interface{}, err error) {
+func (r *Registry) Execute(ctx context.Context, name string, input json.RawMessage) (result interface{}, err error) {
 	tool, ok := r.Get(name)
 	if !ok {
 		return nil, fmt.Errorf("tool not found: %s", name)
@@ -62,7 +64,32 @@ func (r *Registry) Execute(name string, input json.RawMessage) (result interface
 		}
 	}()
 
-	return tool.Execute(input)
+	return tool.Execute(ctx, input)
+}
+
+func (r *Registry) ExecuteWithTimeout(name string, input json.RawMessage, timeout time.Duration) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	resultChan := make(chan struct {
+		result interface{}
+		err    error
+	}, 1)
+
+	go func() {
+		result, err := r.Execute(ctx, name, input)
+		resultChan <- struct {
+			result interface{}
+			err    error
+		}{result, err}
+	}()
+
+	select {
+	case res := <-resultChan:
+		return res.result, res.err
+	case <-ctx.Done():
+		return nil, fmt.Errorf("tool execution timeout after %v", timeout)
+	}
 }
 
 func (r *Registry) List() []Tool {

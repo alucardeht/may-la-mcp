@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -98,7 +99,11 @@ func (t *MemoryWriteTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *MemoryWriteTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *MemoryWriteTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var req struct {
 		Name     string   `json:"name"`
 		Content  string   `json:"content"`
@@ -177,7 +182,10 @@ func (t *MemoryReadTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *MemoryReadTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *MemoryReadTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req struct {
 		Name string `json:"name"`
 	}
@@ -277,7 +285,10 @@ func (t *MemoryUpdateTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *MemoryUpdateTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *MemoryUpdateTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req struct {
 		Name     string   `json:"name"`
 		Content  string   `json:"content"`
@@ -373,7 +384,10 @@ func (t *MemoryListTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *MemoryListTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *MemoryListTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req struct {
 		Category string `json:"category"`
 		Limit    int    `json:"limit"`
@@ -453,7 +467,10 @@ func (t *MemorySearchTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *MemorySearchTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *MemorySearchTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req struct {
 		Query    string `json:"query"`
 		Category string `json:"category"`
@@ -532,7 +549,10 @@ func (t *MemoryDeleteTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *MemoryDeleteTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *MemoryDeleteTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req struct {
 		Name string `json:"name"`
 	}

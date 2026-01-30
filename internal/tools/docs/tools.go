@@ -1,6 +1,7 @@
 package docs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -74,7 +75,11 @@ func (t *DocWriteTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *DocWriteTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *DocWriteTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var req struct {
 		Path        string `json:"path"`
 		Content     string `json:"content"`
@@ -184,7 +189,10 @@ func (t *DocReadTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *DocReadTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *DocReadTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req struct {
 		Path        string `json:"path"`
 		ProjectRoot string `json:"project_root"`

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 )
@@ -35,7 +36,11 @@ func (t *HealthTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *HealthTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *HealthTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	cwd, _ := os.Getwd()
 	return map[string]interface{}{
 		"status":    "healthy",

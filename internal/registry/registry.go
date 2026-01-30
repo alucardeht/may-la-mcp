@@ -1,19 +1,22 @@
 package registry
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 )
 
 type Tool interface {
 	Name() string
 	Description() string
 	Schema() json.RawMessage
-	Execute(input json.RawMessage) (interface{}, error)
+	Execute(ctx context.Context, input json.RawMessage) (interface{}, error)
 }
 
 type Registry struct {
+	mu    sync.RWMutex
 	tools map[string]Tool
 }
 
@@ -28,6 +31,9 @@ func (r *Registry) Register(tool Tool) error {
 		return fmt.Errorf("tool name cannot be empty")
 	}
 
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if _, exists := r.tools[tool.Name()]; exists {
 		return fmt.Errorf("tool '%s' already registered", tool.Name())
 	}
@@ -38,6 +44,9 @@ func (r *Registry) Register(tool Tool) error {
 }
 
 func (r *Registry) Get(name string) (Tool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	tool, exists := r.tools[name]
 	if !exists {
 		return nil, fmt.Errorf("tool '%s' not found", name)
@@ -46,6 +55,9 @@ func (r *Registry) Get(name string) (Tool, error) {
 }
 
 func (r *Registry) List() []Tool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	tools := make([]Tool, 0, len(r.tools))
 	for _, tool := range r.tools {
 		tools = append(tools, tool)
@@ -53,16 +65,19 @@ func (r *Registry) List() []Tool {
 	return tools
 }
 
-func (r *Registry) Execute(name string, input json.RawMessage) (interface{}, error) {
+func (r *Registry) Execute(ctx context.Context, name string, input json.RawMessage) (interface{}, error) {
 	tool, err := r.Get(name)
 	if err != nil {
 		return nil, err
 	}
 
-	return tool.Execute(input)
+	return tool.Execute(ctx, input)
 }
 
 func (r *Registry) GetToolDefinitions() []map[string]interface{} {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	definitions := make([]map[string]interface{}, 0, len(r.tools))
 
 	for _, tool := range r.tools {

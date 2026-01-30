@@ -32,20 +32,16 @@ func processExists(pid int) bool {
 	return err == nil
 }
 
-func monitorParentProcess(ppid int) {
+func monitorParentProcess(ppid int, shutdownFunc func()) {
 	log.Printf("Started monitoring parent process (PID: %d)", ppid)
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		if !processExists(ppid) {
-			log.Println("Parent process died, initiating graceful shutdown...")
-			time.Sleep(30 * time.Second)
-			if !processExists(ppid) {
-				log.Println("Parent still dead, exiting...")
-				os.Exit(0)
-			}
-			log.Println("Parent process recovered, continuing...")
+			log.Println("Parent process died, triggering graceful shutdown")
+			shutdownFunc()
+			return
 		}
 	}
 }
@@ -100,7 +96,10 @@ func main() {
 	}
 
 	if parentPID > 0 {
-		go monitorParentProcess(parentPID)
+		go monitorParentProcess(parentPID, func() {
+			d.Shutdown()
+			os.Exit(0)
+		})
 	}
 
 	sigChan := make(chan os.Signal, 1)

@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -64,7 +65,11 @@ func (t *CreateTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *CreateTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *CreateTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var req CreateRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)

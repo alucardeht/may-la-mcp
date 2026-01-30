@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 )
 
 func TestReadWrite(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.txt")
 	content := "Hello, World!\nLine 2\nLine 3"
@@ -19,7 +21,7 @@ func TestReadWrite(t *testing.T) {
 	}
 
 	writeData, _ := json.Marshal(writeReq)
-	_, err := writeTool.Execute(writeData)
+	_, err := writeTool.Execute(ctx, writeData)
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
@@ -30,7 +32,7 @@ func TestReadWrite(t *testing.T) {
 	}
 
 	readData, _ := json.Marshal(readReq)
-	result, err := readTool.Execute(readData)
+	result, err := readTool.Execute(ctx, readData)
 	if err != nil {
 		t.Fatalf("Read failed: %v", err)
 	}
@@ -46,6 +48,7 @@ func TestReadWrite(t *testing.T) {
 }
 
 func TestEdit(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.txt")
 	originalContent := "Line 1\nLine 2\nLine 3"
@@ -65,7 +68,7 @@ func TestEdit(t *testing.T) {
 	}
 
 	editData, _ := json.Marshal(editReq)
-	result, err := editTool.Execute(editData)
+	result, err := editTool.Execute(ctx, editData)
 	if err != nil {
 		t.Fatalf("Edit failed: %v", err)
 	}
@@ -78,7 +81,7 @@ func TestEdit(t *testing.T) {
 	readTool := &ReadTool{}
 	readReq := ReadRequest{Path: testFile}
 	readData, _ := json.Marshal(readReq)
-	readResult, _ := readTool.Execute(readData)
+	readResult, _ := readTool.Execute(ctx, readData)
 	readResp := readResult.(ReadResponse)
 
 	if readResp.Content != "Line 1\nModified Line 2\nLine 3" {
@@ -87,6 +90,7 @@ func TestEdit(t *testing.T) {
 }
 
 func TestCreateDelete(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "newfile.txt")
 
@@ -98,7 +102,7 @@ func TestCreateDelete(t *testing.T) {
 	}
 
 	createData, _ := json.Marshal(createReq)
-	result, err := createTool.Execute(createData)
+	result, err := createTool.Execute(ctx, createData)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -118,7 +122,7 @@ func TestCreateDelete(t *testing.T) {
 	}
 
 	deleteData, _ := json.Marshal(deleteReq)
-	_, err = deleteTool.Execute(deleteData)
+	_, err = deleteTool.Execute(ctx, deleteData)
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
@@ -129,6 +133,7 @@ func TestCreateDelete(t *testing.T) {
 }
 
 func TestMove(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 	srcFile := filepath.Join(tempDir, "source.txt")
 	dstFile := filepath.Join(tempDir, "destination.txt")
@@ -142,7 +147,7 @@ func TestMove(t *testing.T) {
 	}
 
 	moveData, _ := json.Marshal(moveReq)
-	_, err := moveTool.Execute(moveData)
+	_, err := moveTool.Execute(ctx, moveData)
 	if err != nil {
 		t.Fatalf("Move failed: %v", err)
 	}
@@ -157,6 +162,7 @@ func TestMove(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 	os.Create(filepath.Join(tempDir, "file1.txt"))
 	os.Create(filepath.Join(tempDir, "file2.txt"))
@@ -168,7 +174,7 @@ func TestList(t *testing.T) {
 	}
 
 	listData, _ := json.Marshal(listReq)
-	result, err := listTool.Execute(listData)
+	result, err := listTool.Execute(ctx, listData)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -180,6 +186,7 @@ func TestList(t *testing.T) {
 }
 
 func TestInfo(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.txt")
 	os.WriteFile(testFile, []byte("test"), 0644)
@@ -190,7 +197,7 @@ func TestInfo(t *testing.T) {
 	}
 
 	infoData, _ := json.Marshal(infoReq)
-	result, err := infoTool.Execute(infoData)
+	result, err := infoTool.Execute(ctx, infoData)
 	if err != nil {
 		t.Fatalf("Info failed: %v", err)
 	}

@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,7 +66,11 @@ func (t *ReadTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *ReadTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *ReadTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var req ReadRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)

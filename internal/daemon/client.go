@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 )
@@ -16,31 +17,41 @@ type Client struct {
 	encoder *json.Encoder
 	decoder *json.Decoder
 	mu      sync.Mutex
+	healthy atomic.Bool
 }
 
 func NewClient(conn net.Conn) *Client {
 	writer := bufio.NewWriter(conn)
-	return &Client{
+	c := &Client{
 		conn:    conn,
 		writer:  writer,
 		encoder: json.NewEncoder(writer),
 		decoder: json.NewDecoder(conn),
 	}
+	c.healthy.Store(true)
+	return c
 }
 
 func (c *Client) SendRequest(req *protocol.JSONRPCRequest) (*protocol.JSONRPCResponse, error) {
+	if !c.healthy.Load() {
+		return nil, fmt.Errorf("connection unhealthy")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if err := c.encoder.Encode(req); err != nil {
+		c.healthy.Store(false)
 		return nil, err
 	}
 	if err := c.writer.Flush(); err != nil {
+		c.healthy.Store(false)
 		return nil, err
 	}
 
 	var resp protocol.JSONRPCResponse
 	if err := c.decoder.Decode(&resp); err != nil {
+		c.healthy.Store(false)
 		return nil, err
 	}
 
@@ -65,6 +76,10 @@ func (c *Client) Call(method string, params map[string]interface{}) (interface{}
 	}
 
 	return resp.Result, nil
+}
+
+func (c *Client) IsHealthy() bool {
+	return c.healthy.Load()
 }
 
 func (c *Client) Close() error {
