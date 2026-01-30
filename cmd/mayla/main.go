@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,13 +52,20 @@ func main() {
 
 	setupCleanupHandlers()
 
-	pid, cmd, err := startDaemonForInstance(instanceID)
-	daemonPID = pid
-	daemonCmd = cmd
-	if err != nil {
-		cleanup()
-		fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
-		os.Exit(1)
+	socketPath, existingHealthy := findExistingDaemon(cfg.SocketPath)
+	if existingHealthy {
+		log.Printf("Using existing daemon at %s\n", socketPath)
+		daemonPID = -1
+		daemonCmd = nil
+	} else {
+		pid, cmd, err := startDaemonForInstance(instanceID)
+		daemonPID = pid
+		daemonCmd = cmd
+		if err != nil {
+			cleanup()
+			fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if err := waitForDaemonReady(cfg.SocketPath, 10*time.Second); err != nil {
@@ -65,7 +74,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	go monitorDaemon(cmd)
+	if daemonCmd != nil {
+		go monitorDaemon(daemonCmd)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -90,7 +101,56 @@ func main() {
 }
 
 func generateInstanceID() string {
-	return fmt.Sprintf("%d-%d-%x", os.Getpid(), time.Now().UnixNano(), rand.Int63())
+	cwd, err := os.Getwd()
+	if err == nil {
+		hash := sha256.Sum256([]byte(cwd))
+		hashHex := hex.EncodeToString(hash[:])
+		return fmt.Sprintf("ws-%s", hashHex[:16])
+	}
+
+	return fmt.Sprintf("ws-%x", rand.Uint64())
+}
+
+func findExistingDaemon(socketPath string) (string, bool) {
+	if _, err := os.Stat(socketPath); err != nil {
+		return "", false
+	}
+
+	if isSocketHealthy(socketPath) {
+		return socketPath, true
+	}
+
+	return "", false
+}
+
+func isSocketHealthy(socketPath string) bool {
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	conn.SetDeadline(time.Now().Add(2 * time.Second))
+
+	req := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/list",
+		"params":  map[string]interface{}{},
+	}
+
+	encoder := json.NewEncoder(conn)
+	if err := encoder.Encode(req); err != nil {
+		return false
+	}
+
+	decoder := json.NewDecoder(conn)
+	var resp map[string]interface{}
+	if err := decoder.Decode(&resp); err != nil {
+		return false
+	}
+
+	return true
 }
 
 func startDaemonForInstance(instanceID string) (int, *exec.Cmd, error) {
@@ -100,7 +160,8 @@ func startDaemonForInstance(instanceID string) (int, *exec.Cmd, error) {
 	}
 	daemonPath := filepath.Join(filepath.Dir(execPath), "mayla-daemon")
 
-	cmd := exec.Command(daemonPath, instanceID)
+	parentPID := os.Getpid()
+	cmd := exec.Command(daemonPath, instanceID, fmt.Sprintf("%d", parentPID))
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 
@@ -147,11 +208,11 @@ func monitorDaemon(cmd *exec.Cmd) {
 
 func cleanup() {
 	cleanupOnce.Do(func() {
-		if daemonPID > 0 {
+		if daemonPID > 0 && daemonCmd != nil {
 			killDaemon(daemonPID)
 		}
 
-		if instanceDir != "" {
+		if instanceDir != "" && daemonPID > 0 {
 			os.RemoveAll(instanceDir)
 		}
 	})

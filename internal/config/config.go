@@ -108,6 +108,12 @@ func LoadConfigWithInstance(instanceID string) (*Config, error) {
 		return nil, fmt.Errorf("failed to create instance directory: %w", err)
 	}
 
+	cwd, err := os.Getwd()
+	if err == nil {
+		workspacePath := filepath.Join(instanceDir, "workspace.path")
+		os.WriteFile(workspacePath, []byte(cwd), 0600)
+	}
+
 	return &Config{
 		DaemonAddr:     "127.0.0.1",
 		DaemonPort:     8765,

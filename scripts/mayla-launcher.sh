@@ -66,16 +66,26 @@ check_and_update() {
 
 cleanup_stale_instances() {
 	find "$INSTALL_DIR/instances" -type d -mindepth 1 -maxdepth 1 -mmin +60 2>/dev/null | while read -r instance_dir; do
-		pid_file="$instance_dir/daemon.pid"
+		instance_id=$(basename "$instance_dir")
 
-		if [[ -f "$pid_file" ]]; then
-			pid=$(cat "$pid_file" 2>/dev/null)
-			if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+		workspace_file="$instance_dir/workspace.path"
+		if [[ -f "$workspace_file" ]]; then
+			workspace=$(cat "$workspace_file" 2>/dev/null)
+			if [[ ! -d "$workspace" ]]; then
+				rm -rf "$instance_dir" 2>/dev/null || true
 				continue
 			fi
 		fi
 
-		rm -rf "$instance_dir" 2>/dev/null || true
+		daemon_sock="$instance_dir/daemon.sock"
+		if [[ ! -f "$daemon_sock" ]]; then
+			rm -rf "$instance_dir" 2>/dev/null || true
+			continue
+		fi
+
+		if ! timeout 2 bash -c "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}' | nc -U '$daemon_sock' > /dev/null 2>&1" 2>/dev/null; then
+			rm -rf "$instance_dir" 2>/dev/null || true
+		fi
 	done
 }
 

@@ -129,15 +129,11 @@ func (d *Daemon) registerAllTools() error {
 		}
 	}
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+	instanceDir := filepath.Dir(d.config.SocketPath)
+	if err := os.MkdirAll(instanceDir, 0700); err != nil {
+		return fmt.Errorf("failed to create instance directory: %w", err)
 	}
-	dataDir := filepath.Join(homeDir, ".mayla", "data")
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
-		return fmt.Errorf("failed to create data directory: %w", err)
-	}
-	dbPath := filepath.Join(dataDir, "memory.db")
+	dbPath := filepath.Join(instanceDir, "memory.db")
 
 	memTools, err := memory.GetTools(dbPath)
 	if err != nil {

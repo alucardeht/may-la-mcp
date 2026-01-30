@@ -103,6 +103,69 @@ Automatic encoding detection and normalization:
 - **Latin:** ISO-8859-1 through 16, Windows-1250 through 1258
 - **Cyrillic:** KOI8-R, KOI8-U
 
+## 🏗 Architecture Overview
+
+### Per-Workspace Daemon Isolation
+
+May-la uses a **workspace-based instance isolation system** to support multiple simultaneous projects without conflicts:
+
+#### Instance ID Generation
+```
+workspace_path → SHA-256 hash → ws-<16-char-hex>
+Example: /projects/my-app → ws-a1b2c3d4e5f6g7h8
+```
+
+Each workspace gets a unique instance ID based on its absolute path. This ensures:
+- Multiple projects can run simultaneously
+- No socket/database conflicts
+- Clean resource isolation
+
+#### Instance Directory Structure
+```
+~/.mayla/
+├── instances/
+│   ├── ws-a1b2c3d4e5f6g7h8/     # Instance for workspace A
+│   │   ├── daemon.sock           # Unix socket
+│   │   ├── daemon.lock           # Lock file (prevents conflicts)
+│   │   ├── daemon.pid            # Process ID tracking
+│   │   ├── workspace.path        # Original workspace path
+│   │   ├── memory.db             # Per-workspace memory
+│   │   ├── index.db              # Per-workspace symbol index
+│   │   └── mayla.db              # Per-workspace database
+│   └── ws-x9y8z7w6v5u4t3s2/     # Instance for workspace B
+│       └── ... (isolated resources)
+├── logs/
+│   ├── daemon-ws-a1b2c3d4e5f6g7h8.log
+│   └── daemon-ws-x9y8z7w6v5u4t3s2.log
+├── mayla                         # CLI binary
+└── mayla-daemon                  # Daemon binary
+```
+
+#### Daemon Lifecycle Management
+
+**Startup:**
+1. CLI generates instance ID from current workspace path
+2. Acquires lock file (`daemon.lock`) to prevent race conditions
+3. Checks if existing daemon is healthy for this workspace
+4. Starts new daemon if needed, passing instance ID and parent PID
+
+**PPID Monitoring:**
+- Daemon monitors parent process (CLI) via PPID
+- If parent dies, waits 30 seconds for recovery
+- If still dead, performs graceful shutdown
+- Prevents orphaned daemon processes
+
+**Cleanup:**
+- Automatic cleanup of stale instances (>60 minutes old)
+- Workspace deletion detection via `workspace.path` file
+- Socket health checks before cleanup
+- See `scripts/cleanup-stale-instances.sh` for details
+
+**Concurrency:**
+- Lock files prevent simultaneous daemon starts
+- PID files track running processes
+- Per-workspace isolation = no cross-workspace conflicts
+
 ## 🛠 Installation
 
 May-la works with any MCP-compatible IDE. Choose your IDE below:
@@ -205,8 +268,9 @@ You should see `may-la` in the list of configured MCP servers.
    - `mayla` (CLI client) - ~6-7MB
    - `mayla-daemon` (background server) - ~6-8MB
 4. Stores in `~/.mayla/` directory (or `%USERPROFILE%\.mayla\` on Windows)
-5. For macOS: Removes quarantine attributes to prevent Gatekeeper blocks
-6. Auto-updates when new versions are released
+5. Creates per-workspace instances in `~/.mayla/instances/` for isolation
+6. For macOS: Removes quarantine attributes to prevent Gatekeeper blocks
+7. Auto-updates when new versions are released
 
 ### Supported Platforms
 
@@ -271,6 +335,15 @@ In Claude Code:
 
 You should see `may-la` in the list of available servers.
 
+**Step 3: Verify instance isolation**
+
+```bash
+# Check current workspace instance
+ls ~/.mayla/instances/
+```
+
+Should see `ws-<hash>` directory for current workspace. If working in multiple projects, you should see multiple instance directories.
+
 ### Common Issues
 
 **"Failed to connect to daemon"**
@@ -293,13 +366,26 @@ You should see `may-la` in the list of available servers.
 
 ## 📖 Quick Start
 
-### 1. Start the Daemon
+### 1. Automatic Daemon Management
+
+The daemon is automatically managed by the `mayla` CLI. You don't need to start it manually.
 
 ```bash
-mayla-daemon --socket /tmp/mayla.sock &
+# Daemon starts automatically when you use may-la tools
+# Each workspace gets its own daemon instance
 ```
 
-The daemon listens on a Unix socket for JSON-RPC 2.0 requests.
+> **Note:** The `mayla` CLI automatically:
+> - Generates workspace-based instance ID
+> - Checks for existing healthy daemon
+> - Starts new daemon if needed
+> - Manages daemon lifecycle
+
+For advanced users who need manual control:
+```bash
+# Manual daemon start (rarely needed)
+mayla-daemon <instance-id> [parent-pid]
+```
 
 ### 2. Make Tool Calls
 
@@ -335,6 +421,44 @@ Input:
   path: "internal/tools/files/reader.go"
   language: "go"
 ```
+
+## 🔧 Instance Management
+
+### Viewing Active Instances
+
+```bash
+ls -la ~/.mayla/instances/
+```
+
+Each directory represents a workspace instance (named `ws-<hash>`).
+
+### Checking Instance Health
+
+```bash
+# View instance logs
+tail -f ~/.mayla/logs/daemon-ws-*.log
+
+# Check which workspace an instance belongs to
+cat ~/.mayla/instances/ws-*/workspace.path
+```
+
+### Manual Cleanup
+
+```bash
+# Cleanup stale instances (>60 min old, workspace deleted, or unhealthy)
+bash scripts/cleanup-stale-instances.sh
+
+# Remove specific instance
+rm -rf ~/.mayla/instances/ws-<instance-id>
+```
+
+### Resource Usage
+
+- **Per instance overhead:** ~50MB base, <100MB under load
+- **Shared binaries:** ~13-15MB total (mayla + mayla-daemon)
+- **Total for 5 workspaces:** ~50MB binaries + (5 × 50MB instances) = ~300MB
+
+Multiple workspace support does NOT significantly increase memory usage beyond per-instance isolation.
 
 ## 🏗 Project Structure
 
@@ -535,13 +659,32 @@ Contributions welcome! Please:
 ### Runtime Issues
 
 **"Socket not found" error**
-- Daemon not running: Start manually `~/.mayla/mayla-daemon &`
-- Socket path issue: Check `~/.mayla/config.yaml` for correct socket path
-- On restart, old socket may exist: `rm ~/.mayla/daemon.sock`
+- Daemon not running: Restart your IDE to trigger automatic daemon start
+- Workspace path issue: Check instance directory in `~/.mayla/instances/`
+- Stale socket: Run cleanup script `bash scripts/cleanup-stale-instances.sh`
+
+**Multiple workspaces conflict**
+- Each workspace should have isolated instance in `~/.mayla/instances/`
+- Check instance ID: Look at logs in `~/.mayla/logs/daemon-ws-*.log`
+- Verify workspace.path: `cat ~/.mayla/instances/ws-*/workspace.path`
+- If wrong workspace detected: Delete instance dir and restart
+
+**Orphaned daemon processes**
+- PPID monitoring should auto-cleanup (30s grace period)
+- Manual cleanup: `ps aux | grep mayla-daemon` then `kill <pid>`
+- Stale instance cleanup: Run `scripts/cleanup-stale-instances.sh`
+- Check locks: Remove `~/.mayla/instances/*/daemon.lock` if stuck
+
+**"Failed to acquire instance lock" error**
+- Another daemon is running for this workspace (expected behavior)
+- Lock file stuck: Check if process exists `ps aux | grep mayla-daemon`
+- If process dead: Remove `~/.mayla/instances/<instance-id>/daemon.lock`
+- Restart IDE to trigger fresh daemon start
 
 **High memory usage**
-- Normal: May-la uses <50MB base, <100MB under load
-- If >200MB: Check for memory leaks, report issue with `ps aux | grep mayla`
+- Normal: May-la uses <50MB base per instance, <100MB under load
+- Multiple instances: 5 workspaces = ~300MB total (expected)
+- If >150MB per instance: Check for memory leaks, report issue with `ps aux | grep mayla`
 
 **SQLite/FTS5 errors**
 - Verify CGO is enabled: `strings ~/.mayla/mayla | grep sqlite`
