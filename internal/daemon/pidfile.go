@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 type PIDFile struct {
@@ -73,8 +72,7 @@ func (p *PIDFile) IsProcessAlive() bool {
 		return false
 	}
 
-	err = syscall.Kill(pid, 0)
-	return err == nil
+	return processExists(pid)
 }
 
 func (p *PIDFile) Remove() error {

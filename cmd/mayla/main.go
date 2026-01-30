@@ -12,10 +12,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/alucardeht/may-la-mcp/internal/config"
@@ -186,17 +184,6 @@ func waitForDaemonReady(socketPath string, timeout time.Duration) error {
 	return fmt.Errorf("daemon socket not ready after %v", timeout)
 }
 
-func setupCleanupHandlers() {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-
-	go func() {
-		<-sigChan
-		cleanup()
-		os.Exit(0)
-	}()
-}
-
 func monitorDaemon(cmd *exec.Cmd) {
 	err := cmd.Wait()
 	close(daemonDone)
@@ -216,19 +203,6 @@ func cleanup() {
 			os.RemoveAll(instanceDir)
 		}
 	})
-}
-
-func killDaemon(pid int) {
-	syscall.Kill(pid, syscall.SIGTERM)
-
-	for i := 0; i < 50; i++ {
-		if err := syscall.Kill(pid, 0); err != nil {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	syscall.Kill(pid, syscall.SIGKILL)
 }
 
 func connectWithRetry(ctx context.Context, socketPath string, maxRetries int) (net.Conn, error) {

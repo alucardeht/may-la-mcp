@@ -6,10 +6,8 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/alucardeht/may-la-mcp/internal/config"
@@ -21,15 +19,6 @@ func init() {
 	logCfg := logger.DefaultConfig()
 	logCfg.Level = slog.LevelDebug
 	logger.Init(logCfg)
-}
-
-func processExists(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = process.Signal(syscall.Signal(0))
-	return err == nil
 }
 
 func monitorParentProcess(ppid int, shutdownFunc func()) {
@@ -102,11 +91,9 @@ func main() {
 		})
 	}
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	// Wait for shutdown signal (platform-specific)
+	waitForShutdownSignal()
 
-	<-sigChan
 	log.Println("Shutting down daemon...")
-
 	d.Shutdown()
 }
