@@ -99,14 +99,62 @@ func main() {
 }
 
 func generateInstanceID() string {
+	workspaceRoot := findWorkspaceRoot()
+	hash := sha256.Sum256([]byte(workspaceRoot))
+	hashHex := hex.EncodeToString(hash[:])
+	return fmt.Sprintf("ws-%s", hashHex[:16])
+}
+
+// findWorkspaceRoot finds the root directory of the workspace by looking for
+// common project markers (.git, go.mod, package.json, etc.). This ensures that
+// running the CLI from any subdirectory within the workspace generates the same
+// instance ID, preventing memory loss between sessions.
+func findWorkspaceRoot() string {
 	cwd, err := os.Getwd()
-	if err == nil {
-		hash := sha256.Sum256([]byte(cwd))
-		hashHex := hex.EncodeToString(hash[:])
-		return fmt.Sprintf("ws-%s", hashHex[:16])
+	if err != nil {
+		// Fallback to a random ID if we can't get CWD
+		return fmt.Sprintf("fallback-%x", rand.Uint64())
 	}
 
-	return fmt.Sprintf("ws-%x", rand.Uint64())
+	// Resolve symlinks to get the real path
+	realPath, err := filepath.EvalSymlinks(cwd)
+	if err == nil {
+		cwd = realPath
+	}
+
+	// Project markers to look for (in priority order)
+	markers := []string{
+		".git",          // Git repository root
+		"go.mod",        // Go module root
+		"package.json",  // Node.js project root
+		"Cargo.toml",    // Rust project root
+		"pyproject.toml", // Python project root
+		"pom.xml",       // Maven project root
+		"build.gradle",  // Gradle project root
+		".hg",           // Mercurial repository root
+	}
+
+	// Walk up the directory tree looking for markers
+	dir := cwd
+	for {
+		for _, marker := range markers {
+			markerPath := filepath.Join(dir, marker)
+			if _, err := os.Stat(markerPath); err == nil {
+				return dir
+			}
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root without finding marker
+			break
+		}
+		dir = parent
+	}
+
+	// If no marker found, use the resolved CWD
+	// This ensures consistency even without project markers
+	return cwd
 }
 
 func findExistingDaemon(socketPath string) (string, bool) {
