@@ -50,11 +50,18 @@ func (r *Registry) Get(name string) (Tool, bool) {
 	return tool, ok
 }
 
-func (r *Registry) Execute(name string, input json.RawMessage) (interface{}, error) {
+func (r *Registry) Execute(name string, input json.RawMessage) (result interface{}, err error) {
 	tool, ok := r.Get(name)
 	if !ok {
 		return nil, fmt.Errorf("tool not found: %s", name)
 	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("panic in tool %s: %v", name, p)
+		}
+	}()
+
 	return tool.Execute(input)
 }
 

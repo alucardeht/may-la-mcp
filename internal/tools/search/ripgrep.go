@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 type ripgrepResult struct {
@@ -30,17 +31,17 @@ type ripgrepLines struct {
 	Text string `json:"text"`
 }
 
-var rgAvailable *bool
+var (
+	rgOnce      sync.Once
+	rgAvailable bool
+)
 
 func isRipgrepAvailable() bool {
-	if rgAvailable != nil {
-		return *rgAvailable
-	}
-
-	_, err := exec.LookPath("rg")
-	available := err == nil
-	rgAvailable = &available
-	return available
+	rgOnce.Do(func() {
+		_, err := exec.LookPath("rg")
+		rgAvailable = (err == nil)
+	})
+	return rgAvailable
 }
 
 func executeRipgrep(req SearchRequest) (*SearchResponse, error) {
@@ -117,6 +118,11 @@ func executeRipgrep(req SearchRequest) (*SearchResponse, error) {
 }
 
 func getContextFromRipgrep(searchPath string, filePath string, lineNum int, contextLines int) []string {
+	fileInfo, err := os.Stat(filePath)
+	if err == nil && fileInfo.Size() > MaxGrepFileSize {
+		return nil
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil

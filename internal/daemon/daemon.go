@@ -31,22 +31,23 @@ import (
 var log = logger.ForComponent("daemon")
 
 type Daemon struct {
-	socketPath    string
-	listener      net.Listener
-	registry      *tools.Registry
-	server        *mcp.Server
-	connections   map[net.Conn]bool
-	connMu        sync.Mutex
-	shutdown      chan struct{}
-	shutdownOnce  sync.Once
-	startTime     time.Time
-	config        *config.Config
-	indexStore    *index.IndexStore
-	indexWorker   *index.IndexWorker
-	lspManager    *lsp.Manager
+	socketPath     string
+	listener       net.Listener
+	registry       *tools.Registry
+	server         *mcp.Server
+	connections    map[net.Conn]bool
+	connMu         sync.Mutex
+	shutdown       chan struct{}
+	shutdownOnce   sync.Once
+	startTime      time.Time
+	config         *config.Config
+	indexStore     *index.IndexStore
+	indexWorker    *index.IndexWorker
+	lspManager     *lsp.Manager
 	routerInstance *router.Router
-	fileWatcher   *watcher.Watcher
-	execSem       chan struct{}
+	fileWatcher    *watcher.Watcher
+	execSem        chan struct{}
+	lifecycle      *LifecycleManager
 }
 
 func NewDaemon(cfg *config.Config) (*Daemon, error) {
@@ -94,6 +95,7 @@ func NewDaemon(cfg *config.Config) (*Daemon, error) {
 		routerInstance: routerInstance,
 		fileWatcher:    watcherInstance,
 		execSem:        make(chan struct{}, 50),
+		lifecycle:      NewLifecycleManager(filepath.Dir(cfg.SocketPath), cfg.SocketPath),
 	}
 
 	d.server = mcp.NewServer(d.registry)
@@ -127,9 +129,11 @@ func (d *Daemon) registerAllTools() error {
 		}
 	}
 
-	dataDir := filepath.Join(os.Getenv("HOME"), ".mayla", "data")
-	os.MkdirAll(dataDir, 0755)
-	dbPath := filepath.Join(dataDir, "memory.db")
+	instanceDir := filepath.Dir(d.config.SocketPath)
+	if err := os.MkdirAll(instanceDir, 0700); err != nil {
+		return fmt.Errorf("failed to create instance directory: %w", err)
+	}
+	dbPath := filepath.Join(instanceDir, "memory.db")
 
 	memTools, err := memory.GetTools(dbPath)
 	if err != nil {
@@ -147,6 +151,10 @@ func (d *Daemon) registerAllTools() error {
 func (d *Daemon) Start() error {
 	log.Info("daemon starting", "socket", d.socketPath)
 
+	if err := d.lifecycle.AcquireInstanceLock(); err != nil {
+		return fmt.Errorf("cannot start: %w", err)
+	}
+
 	if err := os.RemoveAll(d.socketPath); err != nil {
 		return fmt.Errorf("failed to remove socket: %w", err)
 	}
@@ -162,7 +170,16 @@ func (d *Daemon) Start() error {
 	}
 	d.listener = listener
 
+	if err := d.lifecycle.RegisterRunningDaemon(); err != nil {
+		d.listener.Close()
+		os.Remove(d.socketPath)
+		return fmt.Errorf("failed to register daemon: %w", err)
+	}
+
 	if err := os.Chmod(d.socketPath, 0700); err != nil {
+		d.lifecycle.Cleanup()
+		d.listener.Close()
+		os.Remove(d.socketPath)
 		return fmt.Errorf("failed to chmod socket: %w", err)
 	}
 
@@ -368,6 +385,7 @@ func (d *Daemon) Shutdown() {
 		d.connMu.Unlock()
 
 		os.Remove(d.socketPath)
+		d.lifecycle.Cleanup()
 		log.Info("daemon stopped")
 	})
 }

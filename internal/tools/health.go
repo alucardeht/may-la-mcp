@@ -1,6 +1,9 @@
 package tools
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"os"
+)
 
 type HealthTool struct{}
 
@@ -33,8 +36,10 @@ func (t *HealthTool) Schema() json.RawMessage {
 }
 
 func (t *HealthTool) Execute(input json.RawMessage) (interface{}, error) {
+	cwd, _ := os.Getwd()
 	return map[string]interface{}{
-		"status": "healthy",
-		"tools":  "loaded",
+		"status":    "healthy",
+		"tools":     "loaded",
+		"workspace": cwd,
 	}, nil
 }

@@ -160,6 +160,14 @@ func findReferencesRegex(ctx context.Context, symbol string, searchPath string, 
 			return nil
 		}
 
+		fileInfo, err := os.Stat(path)
+		if err != nil {
+			return nil
+		}
+		if fileInfo.Size() > 100*1024*1024 {
+			return nil
+		}
+
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return nil
