@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 )
 
 func TestAllToolsE2E(t *testing.T) {
+	ctx := context.Background()
 	tmpDir, err := os.MkdirTemp("", "mayla-e2e-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -50,7 +52,7 @@ func TestAllToolsE2E(t *testing.T) {
 			t.Errorf("Expected %d tools, got %d: %v", expectedCount, len(names), names)
 		}
 
-		t.Logf("✅ Registered %d tools: %v", len(names), names)
+		t.Logf("Registered %d tools: %v", len(names), names)
 	})
 
 	t.Run("Files_CreateReadWriteEditDelete", func(t *testing.T) {
@@ -61,32 +63,32 @@ func TestAllToolsE2E(t *testing.T) {
 			"path": testFile,
 			"type": "file",
 		})
-		result, err := createTool.Execute(input)
+		result, err := createTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Create failed: %v", err)
 		}
-		t.Logf("✅ Create: %v", result)
+		t.Logf("Create: %v", result)
 
 		writeTool := &files.WriteTool{}
 		input, _ = json.Marshal(map[string]interface{}{
 			"path":    testFile,
 			"content": "Hello May-la MCP!\nLine 2\nLine 3",
 		})
-		result, err = writeTool.Execute(input)
+		result, err = writeTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Write failed: %v", err)
 		}
-		t.Logf("✅ Write: %v", result)
+		t.Logf("Write: %v", result)
 
 		readTool := &files.ReadTool{}
 		input, _ = json.Marshal(map[string]interface{}{
 			"path": testFile,
 		})
-		result, err = readTool.Execute(input)
+		result, err = readTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Read failed: %v", err)
 		}
-		t.Logf("✅ Read: %v", result)
+		t.Logf("Read: %v", result)
 
 		editTool := &files.EditTool{}
 		input, _ = json.Marshal(map[string]interface{}{
@@ -98,11 +100,11 @@ func TestAllToolsE2E(t *testing.T) {
 				},
 			},
 		})
-		result, err = editTool.Execute(input)
+		result, err = editTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Edit failed: %v", err)
 		}
-		t.Logf("✅ Edit: %v", result)
+		t.Logf("Edit: %v", result)
 
 		content, _ := os.ReadFile(testFile)
 		if string(content) != "Hello MAYLA MCP!\nLine 2\nLine 3\n" {
@@ -113,11 +115,11 @@ func TestAllToolsE2E(t *testing.T) {
 		input, _ = json.Marshal(map[string]interface{}{
 			"path": testFile,
 		})
-		result, err = infoTool.Execute(input)
+		result, err = infoTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Info failed: %v", err)
 		}
-		t.Logf("✅ Info: %v", result)
+		t.Logf("Info: %v", result)
 
 		movedFile := filepath.Join(tmpDir, "moved.txt")
 		moveTool := &files.MoveTool{}
@@ -125,32 +127,32 @@ func TestAllToolsE2E(t *testing.T) {
 			"source":      testFile,
 			"destination": movedFile,
 		})
-		result, err = moveTool.Execute(input)
+		result, err = moveTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Move failed: %v", err)
 		}
-		t.Logf("✅ Move: %v", result)
+		t.Logf("Move: %v", result)
 
 		listTool := &files.ListTool{}
 		input, _ = json.Marshal(map[string]interface{}{
 			"path": tmpDir,
 		})
-		result, err = listTool.Execute(input)
+		result, err = listTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("List failed: %v", err)
 		}
-		t.Logf("✅ List: %v", result)
+		t.Logf("List: %v", result)
 
 		deleteTool := &files.DeleteTool{}
 		input, _ = json.Marshal(map[string]interface{}{
 			"path":  movedFile,
 			"force": true,
 		})
-		result, err = deleteTool.Execute(input)
+		result, err = deleteTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Delete failed: %v", err)
 		}
-		t.Logf("✅ Delete: %v", result)
+		t.Logf("Delete: %v", result)
 	})
 
 	t.Run("Search_GrepFindSymbolsReferences", func(t *testing.T) {
@@ -174,43 +176,43 @@ func main() {
 			"path":    testDir,
 			"pattern": "HelloWorld",
 		})
-		result, err := searchTool.Execute(input)
+		result, err := searchTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Search failed: %v", err)
 		}
-		t.Logf("✅ Search: %v", result)
+		t.Logf("Search: %v", result)
 
 		findTool := &search.FindTool{}
 		input, _ = json.Marshal(map[string]interface{}{
 			"path":    testDir,
 			"pattern": "*.go",
 		})
-		result, err = findTool.Execute(input)
+		result, err = findTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Find failed: %v", err)
 		}
-		t.Logf("✅ Find: %v", result)
+		t.Logf("Find: %v", result)
 
 		symbolsTool := search.NewSymbolsTool(nil)
 		input, _ = json.Marshal(map[string]interface{}{
 			"path": goFile,
 		})
-		result, err = symbolsTool.Execute(input)
+		result, err = symbolsTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Symbols failed: %v", err)
 		}
-		t.Logf("✅ Symbols: %v", result)
+		t.Logf("Symbols: %v", result)
 
 		refsTool := search.NewReferencesTool(nil)
 		input, _ = json.Marshal(map[string]interface{}{
 			"path":   testDir,
 			"symbol": "HelloWorld",
 		})
-		result, err = refsTool.Execute(input)
+		result, err = refsTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("References failed: %v", err)
 		}
-		t.Logf("✅ References: %v", result)
+		t.Logf("References: %v", result)
 	})
 
 	t.Run("Memory_WriteReadListSearchDelete", func(t *testing.T) {
@@ -242,54 +244,54 @@ func main() {
 			"category": "notes",
 			"tags":     []string{"test", "e2e"},
 		})
-		result, err := writeTool.Execute(input)
+		result, err := writeTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Memory Write failed: %v", err)
 		}
-		t.Logf("✅ Memory Write: %v", result)
+		t.Logf("Memory Write: %v", result)
 
 		input, _ = json.Marshal(map[string]interface{}{
 			"name": "test-memory",
 		})
-		result, err = readTool.Execute(input)
+		result, err = readTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Memory Read failed: %v", err)
 		}
-		t.Logf("✅ Memory Read: %v", result)
+		t.Logf("Memory Read: %v", result)
 
 		input, _ = json.Marshal(map[string]interface{}{})
-		result, err = listTool.Execute(input)
+		result, err = listTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Memory List failed: %v", err)
 		}
-		t.Logf("✅ Memory List: %v", result)
+		t.Logf("Memory List: %v", result)
 
 		input, _ = json.Marshal(map[string]interface{}{
 			"query": "E2E testing",
 		})
-		result, err = searchTool.Execute(input)
+		result, err = searchTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Memory Search failed: %v", err)
 		}
-		t.Logf("✅ Memory Search: %v", result)
+		t.Logf("Memory Search: %v", result)
 
 		input, _ = json.Marshal(map[string]interface{}{
 			"name": "test-memory",
 		})
-		result, err = deleteTool.Execute(input)
+		result, err = deleteTool.Execute(ctx, input)
 		if err != nil {
 			t.Fatalf("Memory Delete failed: %v", err)
 		}
-		t.Logf("✅ Memory Delete: %v", result)
+		t.Logf("Memory Delete: %v", result)
 	})
 
 	t.Run("Health_Check", func(t *testing.T) {
 		healthTool := tools.NewHealthTool()
-		result, err := healthTool.Execute(json.RawMessage(`{}`))
+		result, err := healthTool.Execute(ctx, json.RawMessage(`{}`))
 		if err != nil {
 			t.Fatalf("Health failed: %v", err)
 		}
-		t.Logf("✅ Health: %v", result)
+		t.Logf("Health: %v", result)
 	})
 }
 
@@ -312,7 +314,7 @@ func TestToolsIndividually(t *testing.T) {
 			if len(tool.Schema()) == 0 {
 				t.Error("Tool schema is empty")
 			}
-			t.Logf("✅ %s: name=%s, desc=%d chars, schema=%d bytes",
+			t.Logf("%s: name=%s, desc=%d chars, schema=%d bytes",
 				tool.Name(), tool.Name(), len(tool.Description()), len(tool.Schema()))
 		})
 	}
@@ -329,7 +331,7 @@ func TestToolsIndividually(t *testing.T) {
 			if len(tool.Schema()) == 0 {
 				t.Error("Tool schema is empty")
 			}
-			t.Logf("✅ %s validated", tool.Name())
+			t.Logf("%s validated", tool.Name())
 		})
 	}
 
@@ -346,12 +348,13 @@ func TestToolsIndividually(t *testing.T) {
 			if len(tool.Schema()) == 0 {
 				t.Error("Tool schema is empty")
 			}
-			t.Logf("✅ %s validated", tool.Name())
+			t.Logf("%s validated", tool.Name())
 		})
 	}
 }
 
 func TestErrorScenarios(t *testing.T) {
+	ctx := context.Background()
 	tmpDir, err := os.MkdirTemp("", "mayla-errors-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -363,11 +366,11 @@ func TestErrorScenarios(t *testing.T) {
 		input, _ := json.Marshal(map[string]interface{}{
 			"path": filepath.Join(tmpDir, "nonexistent.txt"),
 		})
-		_, err := readTool.Execute(input)
+		_, err := readTool.Execute(ctx, input)
 		if err == nil {
 			t.Error("Expected error when reading nonexistent file")
 		}
-		t.Logf("✅ ReadNonexistent: correctly returned error")
+		t.Logf("ReadNonexistent: correctly returned error")
 	})
 
 
@@ -380,8 +383,8 @@ func TestErrorScenarios(t *testing.T) {
 			"path":  testFile,
 			"force": false,
 		})
-		result, err := deleteTool.Execute(input)
-		t.Logf("✅ DeleteWithoutForce: returned result=%v, err=%v", result, err)
+		result, err := deleteTool.Execute(ctx, input)
+		t.Logf("DeleteWithoutForce: returned result=%v, err=%v", result, err)
 	})
 
 	t.Run("Memory_ReadNonexistent", func(t *testing.T) {
@@ -400,11 +403,11 @@ func TestErrorScenarios(t *testing.T) {
 			input, _ := json.Marshal(map[string]interface{}{
 				"name": "nonexistent-memory",
 			})
-			_, err := readTool.Execute(input)
+			_, err := readTool.Execute(ctx, input)
 			if err == nil {
 				t.Error("Expected error when reading nonexistent memory")
 			}
-			t.Logf("✅ MemoryReadNonexistent: correctly returned error")
+			t.Logf("MemoryReadNonexistent: correctly returned error")
 		}
 	})
 }
@@ -439,11 +442,12 @@ func TestToolMetadata(t *testing.T) {
 			}
 		}
 
-		t.Logf("✅ All %d tools have valid metadata", len(allTools))
+		t.Logf("All %d tools have valid metadata", len(allTools))
 	})
 }
 
 func TestMemoryIntegration(t *testing.T) {
+	ctx := context.Background()
 	tmpDir, err := os.MkdirTemp("", "mayla-memory-integration-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -484,45 +488,45 @@ func TestMemoryIntegration(t *testing.T) {
 			"category": "testing",
 			"tags":     []string{"integration", "lifecycle"},
 		})
-		result, err := writeMemory.Execute(writeInput)
+		result, err := writeMemory.Execute(ctx, writeInput)
 		if err != nil {
 			t.Fatalf("Write failed: %v", err)
 		}
-		t.Logf("✅ Write: %v", result)
+		t.Logf("Write: %v", result)
 
 		readInput, _ := json.Marshal(map[string]interface{}{
 			"name": "lifecycle-test",
 		})
-		result, err = readMemory.Execute(readInput)
+		result, err = readMemory.Execute(ctx, readInput)
 		if err != nil {
 			t.Fatalf("Read failed: %v", err)
 		}
-		t.Logf("✅ Read: %v", result)
+		t.Logf("Read: %v", result)
 
 		listInput, _ := json.Marshal(map[string]interface{}{})
-		result, err = listMemory.Execute(listInput)
+		result, err = listMemory.Execute(ctx, listInput)
 		if err != nil {
 			t.Fatalf("List failed: %v", err)
 		}
-		t.Logf("✅ List: %v", result)
+		t.Logf("List: %v", result)
 
 		searchInput, _ := json.Marshal(map[string]interface{}{
 			"query": "lifecycle",
 		})
-		result, err = searchMemory.Execute(searchInput)
+		result, err = searchMemory.Execute(ctx, searchInput)
 		if err != nil {
 			t.Fatalf("Search failed: %v", err)
 		}
-		t.Logf("✅ Search: %v", result)
+		t.Logf("Search: %v", result)
 
 		deleteInput, _ := json.Marshal(map[string]interface{}{
 			"name": "lifecycle-test",
 		})
-		result, err = deleteMemory.Execute(deleteInput)
+		result, err = deleteMemory.Execute(ctx, deleteInput)
 		if err != nil {
 			t.Fatalf("Delete failed: %v", err)
 		}
-		t.Logf("✅ Delete: %v", result)
+		t.Logf("Delete: %v", result)
 	})
 
 	t.Run("Memory_MultipleRecords", func(t *testing.T) {
@@ -549,24 +553,24 @@ func TestMemoryIntegration(t *testing.T) {
 
 		for _, record := range records {
 			input, _ := json.Marshal(record)
-			_, err := writeMemory.Execute(input)
+			_, err := writeMemory.Execute(ctx, input)
 			if err != nil {
 				t.Fatalf("Write failed for %s: %v", record["name"], err)
 			}
 		}
 
 		listInput, _ := json.Marshal(map[string]interface{}{})
-		result, err := listMemory.Execute(listInput)
+		result, err := listMemory.Execute(ctx, listInput)
 		if err != nil {
 			t.Fatalf("List failed: %v", err)
 		}
-		t.Logf("✅ MultipleRecords: %v", result)
+		t.Logf("MultipleRecords: %v", result)
 
 		for _, record := range records {
 			deleteInput, _ := json.Marshal(map[string]interface{}{
 				"name": record["name"],
 			})
-			_, err := deleteMemory.Execute(deleteInput)
+			_, err := deleteMemory.Execute(ctx, deleteInput)
 			if err != nil {
 				t.Fatalf("Delete failed for %s: %v", record["name"], err)
 			}

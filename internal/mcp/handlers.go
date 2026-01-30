@@ -3,12 +3,16 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"runtime/debug"
 	"time"
 
+	"github.com/alucardeht/may-la-mcp/internal/logger"
 	"github.com/alucardeht/may-la-mcp/internal/tools"
 	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 	"github.com/alucardeht/may-la-mcp/pkg/version"
 )
+
+var log = logger.ForComponent("mcp")
 
 type Handler struct {
 	registry  *tools.Registry
@@ -157,7 +161,16 @@ func (h *Handler) handleInitializedNotification(req *Request) {
 	h.initialized = true
 }
 
-func (h *Handler) handleCallTool(req *Request) (interface{}, error) {
+func (h *Handler) handleCallTool(req *Request) (result interface{}, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("tool execution panicked: %v", r)
+			log.Error("tool panic recovered",
+				"panic", r,
+				"stack", string(debug.Stack()))
+		}
+	}()
+
 	callReq := struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -176,7 +189,7 @@ func (h *Handler) handleCallTool(req *Request) (interface{}, error) {
 		return nil, fmt.Errorf("tool name is required")
 	}
 
-	result, err := h.registry.Execute(callReq.Name, callReq.Arguments)
+	result, err = h.registry.ExecuteWithTimeout(callReq.Name, callReq.Arguments, 4*time.Minute)
 	if err != nil {
 		return nil, err
 	}

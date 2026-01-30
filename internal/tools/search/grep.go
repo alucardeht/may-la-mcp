@@ -2,6 +2,7 @@ package search
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -93,7 +94,10 @@ func (t *SearchTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *SearchTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *SearchTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req SearchRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -118,10 +122,10 @@ func (t *SearchTool) Execute(input json.RawMessage) (interface{}, error) {
 		return rgOutput, nil
 	}
 
-	return searchWithGo(req)
+	return searchWithGo(ctx, req)
 }
 
-func searchWithGo(req SearchRequest) (interface{}, error) {
+func searchWithGo(ctx context.Context, req SearchRequest) (interface{}, error) {
 	var pattern *regexp.Regexp
 	var err error
 
@@ -140,6 +144,11 @@ func searchWithGo(req SearchRequest) (interface{}, error) {
 	visited := make(map[string]bool)
 
 	err = filepath.WalkDir(req.Path, func(path string, d os.DirEntry, err error) error {
+		// Check for context cancellation to respect timeouts
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		if err != nil {
 			return nil
 		}

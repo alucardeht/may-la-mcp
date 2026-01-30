@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -48,6 +49,8 @@ type Daemon struct {
 	fileWatcher    *watcher.Watcher
 	execSem        chan struct{}
 	lifecycle      *LifecycleManager
+	shuttingDown   atomic.Bool
+	activeConns    sync.WaitGroup
 }
 
 func NewDaemon(cfg *config.Config) (*Daemon, error) {
@@ -228,6 +231,7 @@ func (d *Daemon) acceptConnections() {
 		d.connections[conn] = true
 		d.connMu.Unlock()
 
+		d.activeConns.Add(1)
 		log.Debug("accepted connection", "client", conn.RemoteAddr().String())
 		go d.handleConnection(conn)
 	}
@@ -239,15 +243,19 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.connMu.Lock()
 		delete(d.connections, conn)
 		d.connMu.Unlock()
+		d.activeConns.Done()
 	}()
-
-	conn.SetDeadline(time.Now().Add(5 * time.Minute))
 
 	writer := bufio.NewWriter(conn)
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(writer)
 
 	for {
+		if err := conn.SetDeadline(time.Now().Add(5 * time.Minute)); err != nil {
+			log.Error("failed to update connection deadline", "error", err)
+			return
+		}
+
 		var raw json.RawMessage
 		if err := decoder.Decode(&raw); err != nil {
 			return
@@ -276,8 +284,17 @@ func (d *Daemon) handleBatch(raw json.RawMessage, encoder *json.Encoder, writer 
 				Message: "Parse error",
 			},
 		}
-		encoder.Encode(errResp)
-		writer.Flush()
+		if d.shuttingDown.Load() {
+			return
+		}
+		if err := encoder.Encode(errResp); err != nil {
+			log.Error("failed to encode parse error response", "error", err)
+			return
+		}
+		if err := writer.Flush(); err != nil {
+			log.Error("failed to flush parse error response", "error", err)
+			return
+		}
 		return
 	}
 
@@ -285,13 +302,21 @@ func (d *Daemon) handleBatch(raw json.RawMessage, encoder *json.Encoder, writer 
 	case d.execSem <- struct{}{}:
 		responses := d.server.HandleBatch(batch)
 		<-d.execSem
+		if d.shuttingDown.Load() {
+			return
+		}
 		if err := encoder.Encode(responses); err != nil {
+			log.Error("failed to encode batch responses", "error", err)
 			return
 		}
 		if err := writer.Flush(); err != nil {
+			log.Error("failed to flush batch responses", "error", err)
 			return
 		}
 	case <-time.After(30 * time.Second):
+		if d.shuttingDown.Load() {
+			return
+		}
 		busyResps := make([]*mcp.Response, len(batch))
 		for i, req := range batch {
 			if req.ID != nil {
@@ -306,9 +331,11 @@ func (d *Daemon) handleBatch(raw json.RawMessage, encoder *json.Encoder, writer 
 			}
 		}
 		if err := encoder.Encode(busyResps); err != nil {
+			log.Error("failed to encode busy response", "error", err)
 			return
 		}
 		if err := writer.Flush(); err != nil {
+			log.Error("failed to flush busy response", "error", err)
 			return
 		}
 	}
@@ -325,8 +352,17 @@ func (d *Daemon) handleSingleRequest(raw json.RawMessage, encoder *json.Encoder,
 				Message: "Parse error",
 			},
 		}
-		encoder.Encode(errResp)
-		writer.Flush()
+		if d.shuttingDown.Load() {
+			return
+		}
+		if err := encoder.Encode(errResp); err != nil {
+			log.Error("failed to encode parse error response", "error", err)
+			return
+		}
+		if err := writer.Flush(); err != nil {
+			log.Error("failed to flush parse error response", "error", err)
+			return
+		}
 		return
 	}
 
@@ -334,13 +370,21 @@ func (d *Daemon) handleSingleRequest(raw json.RawMessage, encoder *json.Encoder,
 	case d.execSem <- struct{}{}:
 		resp := d.server.HandleRequest(&req)
 		<-d.execSem
+		if d.shuttingDown.Load() {
+			return
+		}
 		if err := encoder.Encode(resp); err != nil {
+			log.Error("failed to encode single response", "error", err)
 			return
 		}
 		if err := writer.Flush(); err != nil {
+			log.Error("failed to flush single response", "error", err)
 			return
 		}
 	case <-time.After(30 * time.Second):
+		if d.shuttingDown.Load() {
+			return
+		}
 		busyResp := &mcp.Response{
 			JSONRPC: "2.0",
 			ID:      req.ID,
@@ -350,9 +394,11 @@ func (d *Daemon) handleSingleRequest(raw json.RawMessage, encoder *json.Encoder,
 			},
 		}
 		if err := encoder.Encode(busyResp); err != nil {
+			log.Error("failed to encode busy response", "error", err)
 			return
 		}
 		if err := writer.Flush(); err != nil {
+			log.Error("failed to flush busy response", "error", err)
 			return
 		}
 	}
@@ -370,7 +416,21 @@ func (d *Daemon) Shutdown() {
 	d.shutdownOnce.Do(func() {
 		log.Info("daemon shutting down")
 
+		d.shuttingDown.Store(true)
 		close(d.shutdown)
+
+		done := make(chan struct{})
+		go func() {
+			d.activeConns.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			log.Info("all connections drained gracefully")
+		case <-time.After(30 * time.Second):
+			log.Warn("shutdown timeout reached, forcing close")
+		}
 
 		d.cleanupComponents()
 

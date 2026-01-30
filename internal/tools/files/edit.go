@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -85,7 +86,10 @@ func (t *EditTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *EditTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *EditTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req EditRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)

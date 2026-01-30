@@ -3,8 +3,10 @@ package daemon
 import (
 	"fmt"
 	"os"
-	"syscall"
 )
+
+// ErrLockHeld is returned when attempting to acquire a lock that is already held
+var ErrLockHeld = fmt.Errorf("daemon already running (lock held)")
 
 type LockFile struct {
 	path string
@@ -21,13 +23,10 @@ func (l *LockFile) Acquire() error {
 		return fmt.Errorf("failed to open lock file: %w", err)
 	}
 
-	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	err = l.platformLock(f)
 	if err != nil {
 		f.Close()
-		if err == syscall.EWOULDBLOCK {
-			return fmt.Errorf("daemon already running (lock held)")
-		}
-		return fmt.Errorf("failed to acquire lock: %w", err)
+		return err
 	}
 
 	l.file = f
@@ -39,7 +38,7 @@ func (l *LockFile) Release() error {
 		return nil
 	}
 
-	syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN)
+	l.platformUnlock(l.file)
 
 	err := l.file.Close()
 	l.file = nil
@@ -54,7 +53,7 @@ func (l *LockFile) Abandon() error {
 		return nil
 	}
 
-	syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN)
+	l.platformUnlock(l.file)
 
 	err := l.file.Close()
 	l.file = nil

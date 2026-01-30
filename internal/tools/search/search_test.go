@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func TestReferencesTool(t *testing.T) {
 }
 
 func TestGetTools(t *testing.T) {
-	tools := GetTools()
+	tools := GetTools(nil)
 
 	if len(tools) != 4 {
 		t.Errorf("expected 4 tools, got %d", len(tools))
@@ -91,33 +92,34 @@ func TestGetTools(t *testing.T) {
 }
 
 func TestGetToolByName(t *testing.T) {
-	searchTool := GetToolByName("search")
+	searchTool := GetToolByName("search", nil)
 	if searchTool == nil {
 		t.Error("search tool should not be nil")
 	}
 
-	findTool := GetToolByName("find")
+	findTool := GetToolByName("find", nil)
 	if findTool == nil {
 		t.Error("find tool should not be nil")
 	}
 
-	symbolsTool := GetToolByName("symbols")
+	symbolsTool := GetToolByName("symbols", nil)
 	if symbolsTool == nil {
 		t.Error("symbols tool should not be nil")
 	}
 
-	referencesTool := GetToolByName("references")
+	referencesTool := GetToolByName("references", nil)
 	if referencesTool == nil {
 		t.Error("references tool should not be nil")
 	}
 
-	nonExistent := GetToolByName("nonexistent")
+	nonExistent := GetToolByName("nonexistent", nil)
 	if nonExistent != nil {
 		t.Error("nonexistent tool should be nil")
 	}
 }
 
 func TestSearchWithGo(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -129,7 +131,7 @@ func TestSearchWithGo(t *testing.T) {
 		Path:    tempDir,
 	}
 
-	resp, err := searchWithGo(req)
+	resp, err := searchWithGo(ctx, req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -154,21 +156,22 @@ func TestSearchWithGo(t *testing.T) {
 
 func TestSearchRequestValidation(t *testing.T) {
 	tool := &SearchTool{}
+	ctx := context.Background()
 
 	invalidJSON := json.RawMessage(`{"invalid": "json"`)
-	_, err := tool.Execute(invalidJSON)
+	_, err := tool.Execute(ctx, invalidJSON)
 	if err == nil {
 		t.Error("expected error for invalid JSON")
 	}
 
 	noPattern := json.RawMessage(`{"path": "/tmp"}`)
-	_, err = tool.Execute(noPattern)
+	_, err = tool.Execute(ctx, noPattern)
 	if err == nil {
 		t.Error("expected error for missing pattern")
 	}
 
 	noPath := json.RawMessage(`{"pattern": "test"}`)
-	_, err = tool.Execute(noPath)
+	_, err = tool.Execute(ctx, noPath)
 	if err == nil {
 		t.Error("expected error for missing path")
 	}

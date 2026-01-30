@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -81,7 +82,10 @@ func (t *FindTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *FindTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *FindTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req FindRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -105,6 +109,11 @@ func (t *FindTool) Execute(input json.RawMessage) (interface{}, error) {
 	totalSize := int64(0)
 
 	err := filepath.WalkDir(req.Path, func(path string, d os.DirEntry, err error) error {
+		// Check for context cancellation to respect timeouts
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		if err != nil {
 			return nil
 		}

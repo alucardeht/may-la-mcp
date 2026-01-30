@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -52,7 +53,11 @@ func (t *DeleteTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *DeleteTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *DeleteTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var req DeleteRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)

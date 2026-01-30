@@ -80,7 +80,11 @@ func (t *SymbolsTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *SymbolsTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *SymbolsTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var req SymbolsRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -94,7 +98,7 @@ func (t *SymbolsTool) Execute(input json.RawMessage) (interface{}, error) {
 		req.MaxResults = 500
 	}
 
-	ctx := context.Background()
+	// Use the passed context to respect timeouts - DO NOT override with context.Background()
 
 	opts := router.QueryOptions{
 		MaxResults:   req.MaxResults,
@@ -148,6 +152,10 @@ func (t *SymbolsTool) executeRegex(ctx context.Context, path, query string, kind
 
 	if info.IsDir() {
 		err = filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+			// Check for context cancellation to respect timeouts
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			if err != nil {
 				return nil
 			}

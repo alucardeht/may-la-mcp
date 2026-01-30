@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 )
 
 func TestCompleteWorkflow(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 
 	createTool := &CreateTool{}
@@ -17,7 +19,7 @@ func TestCompleteWorkflow(t *testing.T) {
 		Type: "dir",
 	}
 	createDirData, _ := json.Marshal(createDirReq)
-	_, err := createTool.Execute(createDirData)
+	_, err := createTool.Execute(ctx, createDirData)
 	if err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
 	}
@@ -29,7 +31,7 @@ func TestCompleteWorkflow(t *testing.T) {
 	}
 	writeTool := &WriteTool{}
 	writeData, _ := json.Marshal(writeReq)
-	_, err = writeTool.Execute(writeData)
+	_, err = writeTool.Execute(ctx, writeData)
 	if err != nil {
 		t.Fatalf("Failed to write file: %v", err)
 	}
@@ -37,7 +39,7 @@ func TestCompleteWorkflow(t *testing.T) {
 	infoReq := InfoRequest{Path: testFile}
 	infoTool := &InfoTool{}
 	infoData, _ := json.Marshal(infoReq)
-	infoResult, err := infoTool.Execute(infoData)
+	infoResult, err := infoTool.Execute(ctx, infoData)
 	if err != nil {
 		t.Fatalf("Failed to get info: %v", err)
 	}
@@ -52,7 +54,7 @@ func TestCompleteWorkflow(t *testing.T) {
 	}
 	listTool := &ListTool{}
 	listData, _ := json.Marshal(listReq)
-	listResult, err := listTool.Execute(listData)
+	listResult, err := listTool.Execute(ctx, listData)
 	if err != nil {
 		t.Fatalf("Failed to list directory: %v", err)
 	}
@@ -72,7 +74,7 @@ func TestCompleteWorkflow(t *testing.T) {
 	}
 	editTool := &EditTool{}
 	editData, _ := json.Marshal(editReq)
-	_, err = editTool.Execute(editData)
+	_, err = editTool.Execute(ctx, editData)
 	if err != nil {
 		t.Fatalf("Failed to edit file: %v", err)
 	}
@@ -80,7 +82,7 @@ func TestCompleteWorkflow(t *testing.T) {
 	readReq := ReadRequest{Path: testFile}
 	readTool := &ReadTool{}
 	readData, _ := json.Marshal(readReq)
-	readResult, err := readTool.Execute(readData)
+	readResult, err := readTool.Execute(ctx, readData)
 	if err != nil {
 		t.Fatalf("Failed to read file: %v", err)
 	}
@@ -96,7 +98,7 @@ func TestCompleteWorkflow(t *testing.T) {
 		Backup:  true,
 	}
 	writeBackupData, _ := json.Marshal(writeBackupReq)
-	writeBackupResp, err := writeTool.Execute(writeBackupData)
+	writeBackupResp, err := writeTool.Execute(ctx, writeBackupData)
 	if err != nil {
 		t.Fatalf("Failed to write with backup: %v", err)
 	}
@@ -115,7 +117,7 @@ func TestCompleteWorkflow(t *testing.T) {
 	}
 	moveTool := &MoveTool{}
 	moveData, _ := json.Marshal(moveReq)
-	_, err = moveTool.Execute(moveData)
+	_, err = moveTool.Execute(ctx, moveData)
 	if err != nil {
 		t.Fatalf("Failed to move file: %v", err)
 	}
@@ -134,7 +136,7 @@ func TestCompleteWorkflow(t *testing.T) {
 	}
 	deleteTool := &DeleteTool{}
 	deleteData, _ := json.Marshal(deleteReq)
-	_, err = deleteTool.Execute(deleteData)
+	_, err = deleteTool.Execute(ctx, deleteData)
 	if err != nil {
 		t.Fatalf("Failed to delete directory: %v", err)
 	}
@@ -145,6 +147,7 @@ func TestCompleteWorkflow(t *testing.T) {
 }
 
 func TestErrorHandling(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		name      string
 		tool      string
@@ -198,17 +201,17 @@ func TestErrorHandling(t *testing.T) {
 
 			switch tt.tool {
 			case "read":
-				result, err = (&ReadTool{}).Execute(data)
+				result, err = (&ReadTool{}).Execute(ctx, data)
 			case "write":
-				result, err = (&WriteTool{}).Execute(data)
+				result, err = (&WriteTool{}).Execute(ctx, data)
 			case "create":
-				result, err = (&CreateTool{}).Execute(data)
+				result, err = (&CreateTool{}).Execute(ctx, data)
 			case "delete":
-				result, err = (&DeleteTool{}).Execute(data)
+				result, err = (&DeleteTool{}).Execute(ctx, data)
 			case "list":
-				result, err = (&ListTool{}).Execute(data)
+				result, err = (&ListTool{}).Execute(ctx, data)
 			case "info":
-				result, err = (&InfoTool{}).Execute(data)
+				result, err = (&InfoTool{}).Execute(ctx, data)
 			}
 
 			if tt.shouldErr {
@@ -225,6 +228,7 @@ func TestErrorHandling(t *testing.T) {
 }
 
 func TestEditEdgeCases(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.txt")
 
@@ -241,7 +245,7 @@ func TestEditEdgeCases(t *testing.T) {
 			},
 		}
 		editData, _ := json.Marshal(editReq)
-		_, err := editTool.Execute(editData)
+		_, err := editTool.Execute(ctx, editData)
 		if err == nil {
 			t.Error("Expected error for invalid line range")
 		}
@@ -253,7 +257,7 @@ func TestEditEdgeCases(t *testing.T) {
 			Edits: []EditOperation{},
 		}
 		editData, _ := json.Marshal(editReq)
-		_, err := editTool.Execute(editData)
+		_, err := editTool.Execute(ctx, editData)
 		if err == nil {
 			t.Error("Expected error for empty edits")
 		}
@@ -267,7 +271,7 @@ func TestEditEdgeCases(t *testing.T) {
 			},
 		}
 		editData, _ := json.Marshal(editReq)
-		_, err := editTool.Execute(editData)
+		_, err := editTool.Execute(ctx, editData)
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -275,6 +279,7 @@ func TestEditEdgeCases(t *testing.T) {
 }
 
 func TestEncoding(t *testing.T) {
+	ctx := context.Background()
 	tempDir := t.TempDir()
 
 	tests := []struct {
@@ -308,7 +313,7 @@ func TestEncoding(t *testing.T) {
 				Encoding: "auto",
 			}
 			readData, _ := json.Marshal(readReq)
-			result, err := readTool.Execute(readData)
+			result, err := readTool.Execute(ctx, readData)
 			if err != nil {
 				t.Fatalf("Read failed: %v", err)
 			}

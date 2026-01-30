@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -60,7 +61,11 @@ func (t *WriteTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *WriteTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *WriteTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var req WriteRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)

@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -75,7 +76,10 @@ func (t *ListTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *ListTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *ListTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var req ListRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -101,6 +105,11 @@ func (t *ListTool) Execute(input json.RawMessage) (interface{}, error) {
 
 	if req.Recursive {
 		err = filepath.Walk(req.Path, func(path string, info os.FileInfo, err error) error {
+			// Check for context cancellation to respect timeouts
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
 			if err != nil {
 				return err
 			}

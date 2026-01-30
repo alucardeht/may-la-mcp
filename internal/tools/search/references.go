@@ -76,7 +76,11 @@ func (t *ReferencesTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *ReferencesTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *ReferencesTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var req ReferencesRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -93,7 +97,7 @@ func (t *ReferencesTool) Execute(input json.RawMessage) (interface{}, error) {
 		req.MaxResults = 1000
 	}
 
-	ctx := context.Background()
+	// Use the passed context to respect timeouts - DO NOT override with context.Background()
 
 	opts := router.QueryOptions{
 		MaxResults:    req.MaxResults,

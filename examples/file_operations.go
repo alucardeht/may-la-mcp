@@ -1,6 +1,7 @@
 package examples
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/alucardeht/may-la-mcp/internal/registry"
@@ -8,6 +9,7 @@ import (
 )
 
 func ExampleFileOperations() {
+	ctx := context.Background()
 	reg := registry.NewRegistry()
 
 	if err := registry.InitializeAllTools(reg); err != nil {
@@ -21,7 +23,7 @@ func ExampleFileOperations() {
 		"backup":  false,
 	}
 	writeData, _ := json.Marshal(writeInput)
-	result, err := reg.Execute("write", writeData)
+	result, err := reg.Execute(ctx, "write", writeData)
 	if err != nil {
 		log.Printf("Error: %v", err)
 	} else {
@@ -33,7 +35,7 @@ func ExampleFileOperations() {
 		"path": "/tmp/example.txt",
 	}
 	readData, _ := json.Marshal(readInput)
-	result, err = reg.Execute("read", readData)
+	result, err = reg.Execute(ctx, "read", readData)
 	if err != nil {
 		log.Printf("Error: %v", err)
 	} else {
@@ -52,7 +54,7 @@ func ExampleFileOperations() {
 		},
 	}
 	editData, _ := json.Marshal(editInput)
-	result, err = reg.Execute("edit", editData)
+	result, err = reg.Execute(ctx, "edit", editData)
 	if err != nil {
 		log.Printf("Error: %v", err)
 	} else {
@@ -66,7 +68,7 @@ func ExampleFileOperations() {
 		"sortBy":    "name",
 	}
 	listData, _ := json.Marshal(listInput)
-	result, err = reg.Execute("list", listData)
+	result, err = reg.Execute(ctx, "list", listData)
 	if err != nil {
 		log.Printf("Error: %v", err)
 	} else {
@@ -79,7 +81,7 @@ func ExampleFileOperations() {
 		"path": "/tmp/example.txt",
 	}
 	infoData, _ := json.Marshal(infoInput)
-	result, err = reg.Execute("info", infoData)
+	result, err = reg.Execute(ctx, "info", infoData)
 	if err != nil {
 		log.Printf("Error: %v", err)
 	} else {

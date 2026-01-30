@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -53,7 +54,11 @@ func (t *MoveTool) Schema() json.RawMessage {
 	}`)
 }
 
-func (t *MoveTool) Execute(input json.RawMessage) (interface{}, error) {
+func (t *MoveTool) Execute(ctx context.Context, input json.RawMessage) (interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var req MoveRequest
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)

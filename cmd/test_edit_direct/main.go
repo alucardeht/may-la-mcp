@@ -1,6 +1,7 @@
 package main
 
 import (
+    "context"
     "encoding/json"
     "fmt"
     "os"
@@ -10,28 +11,30 @@ import (
 )
 
 func main() {
+    ctx := context.Background()
+
     tmpDir, _ := os.MkdirTemp("", "edit-test-*")
     defer os.RemoveAll(tmpDir)
-    
+
     testFile := filepath.Join(tmpDir, "test.txt")
-    
+
     createTool := &files.CreateTool{}
     input, _ := json.Marshal(map[string]interface{}{
         "path": testFile,
         "type": "file",
     })
-    createTool.Execute(input)
-    
+    createTool.Execute(ctx, input)
+
     writeTool := &files.WriteTool{}
     input, _ = json.Marshal(map[string]interface{}{
         "path":    testFile,
         "content": "Hello May-la MCP!\nLine 2\nLine 3",
     })
-    writeTool.Execute(input)
-    
+    writeTool.Execute(ctx, input)
+
     contentBefore, _ := os.ReadFile(testFile)
     fmt.Printf("BEFORE EDIT:\n%q\n\n", string(contentBefore))
-    
+
     editTool := &files.EditTool{}
     input, _ = json.Marshal(map[string]interface{}{
         "path": testFile,
@@ -42,7 +45,7 @@ func main() {
             },
         },
     })
-    result, err := editTool.Execute(input)
+    result, err := editTool.Execute(ctx, input)
     fmt.Printf("EDIT RESULT: %v, ERR: %v\n\n", result, err)
     
     contentAfter, _ := os.ReadFile(testFile)
