@@ -26,6 +26,17 @@ func GetTools(dbPath string) ([]tools.Tool, error) {
 	}, nil
 }
 
+func GetToolsFromStore(store *MemoryStore) []tools.Tool {
+	return []tools.Tool{
+		NewMemoryWriteTool(store),
+		NewMemoryReadTool(store),
+		NewMemoryUpdateTool(store),
+		NewMemoryListTool(store),
+		NewMemorySearchTool(store),
+		NewMemoryDeleteTool(store),
+	}
+}
+
 type MemoryWriteTool struct {
 	store *MemoryStore
 }
