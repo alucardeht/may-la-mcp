@@ -39,8 +39,14 @@ func NewMemoryStore(dbPath string) (*MemoryStore, error) {
 		return nil, err
 	}
 
-	_, _ = db.Exec(`DELETE FROM memories_fts WHERE name IN (SELECT name FROM memories WHERE deleted_at IS NOT NULL)`)
-	_, _ = db.Exec(`DELETE FROM memories WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-1 day')`)
+	if _, err := db.Exec(`DELETE FROM memories_fts WHERE name IN (SELECT name FROM memories WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-30 days'))`); err != nil {
+	}
+	result, err := db.Exec(`DELETE FROM memories WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', '-30 days')`)
+	if err == nil {
+		if rows, _ := result.RowsAffected(); rows > 0 {
+			fmt.Printf("Purged %d soft-deleted memories older than 30 days\n", rows)
+		}
+	}
 
 	return store, nil
 }
@@ -466,6 +472,9 @@ func (s *MemoryStore) Search(query string, category *Category, limit int) ([]*Se
 }
 
 func (s *MemoryStore) Close() error {
+	if _, err := s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		// Checkpoint failure is not critical - DB will close normally even if truncation fails
+	}
 	return s.db.Close()
 }
 

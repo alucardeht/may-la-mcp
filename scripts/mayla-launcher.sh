@@ -64,27 +64,43 @@ check_and_update() {
 	fi
 }
 
+backup_instance() {
+	local instance_dir=$1
+	local instance_id=$(basename "$instance_dir")
+	local backup_dir="$INSTALL_DIR/backups/$instance_id-$(date +%s)"
+
+	mkdir -p "$INSTALL_DIR/backups"
+	mv "$instance_dir" "$backup_dir" 2>/dev/null || return 1
+	echo "Backed up instance to: $backup_dir" >&2
+	return 0
+}
+
 cleanup_stale_instances() {
 	find "$INSTALL_DIR/instances" -type d -mindepth 1 -maxdepth 1 -mmin +60 2>/dev/null | while read -r instance_dir; do
 		instance_id=$(basename "$instance_dir")
+
+		if [[ -f "$instance_dir/memory.db" ]] || [[ -f "$instance_dir/index.db" ]]; then
+			echo "WARNING: Preserving instance $instance_id (contains databases)" >&2
+			continue
+		fi
 
 		workspace_file="$instance_dir/workspace.path"
 		if [[ -f "$workspace_file" ]]; then
 			workspace=$(cat "$workspace_file" 2>/dev/null)
 			if [[ ! -d "$workspace" ]]; then
-				rm -rf "$instance_dir" 2>/dev/null || true
+				backup_instance "$instance_dir" || true
 				continue
 			fi
 		fi
 
 		daemon_sock="$instance_dir/daemon.sock"
 		if [[ ! -f "$daemon_sock" ]]; then
-			rm -rf "$instance_dir" 2>/dev/null || true
+			backup_instance "$instance_dir" || true
 			continue
 		fi
 
 		if ! timeout 2 bash -c "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}' | nc -U '$daemon_sock' > /dev/null 2>&1" 2>/dev/null; then
-			rm -rf "$instance_dir" 2>/dev/null || true
+			backup_instance "$instance_dir" || true
 		fi
 	done
 }

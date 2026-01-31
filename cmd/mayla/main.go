@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -247,7 +248,19 @@ func cleanup() {
 			killDaemon(daemonPID)
 		}
 
-		if instanceDir != "" && daemonPID > 0 {
+		if instanceDir != "" && daemonPID > 0 && strings.HasPrefix(instanceID, "fallback-") {
+			memDB := filepath.Join(instanceDir, "memory.db")
+			idxDB := filepath.Join(instanceDir, "index.db")
+
+			if _, err := os.Stat(memDB); err == nil {
+				log.Printf("Preserving fallback instance (contains memory.db)")
+				return
+			}
+			if _, err := os.Stat(idxDB); err == nil {
+				log.Printf("Preserving fallback instance (contains index.db)")
+				return
+			}
+
 			os.RemoveAll(instanceDir)
 		}
 	})

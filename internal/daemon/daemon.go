@@ -51,6 +51,7 @@ type Daemon struct {
 	lifecycle      *LifecycleManager
 	shuttingDown   atomic.Bool
 	activeConns    sync.WaitGroup
+	memoryStore    *memory.MemoryStore
 }
 
 func NewDaemon(cfg *config.Config) (*Daemon, error) {
@@ -138,10 +139,13 @@ func (d *Daemon) registerAllTools() error {
 	}
 	dbPath := filepath.Join(instanceDir, "memory.db")
 
-	memTools, err := memory.GetTools(dbPath)
+	var err error
+	d.memoryStore, err = memory.NewMemoryStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("memory: %w", err)
 	}
+
+	memTools := memory.GetToolsFromStore(d.memoryStore)
 	for _, tool := range memTools {
 		if err := d.registry.Register(tool); err != nil {
 			return fmt.Errorf("memory: %w", err)
@@ -461,6 +465,12 @@ func (d *Daemon) cleanupComponents() {
 
 	if d.lspManager != nil {
 		d.lspManager.StopAll(context.Background())
+	}
+
+	if d.memoryStore != nil {
+		if err := d.memoryStore.Close(); err != nil {
+			log.Error("failed to close memory store", "error", err)
+		}
 	}
 
 	if d.indexStore != nil {
