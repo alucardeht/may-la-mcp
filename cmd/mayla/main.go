@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -36,8 +37,6 @@ var (
 )
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
 	instanceID = generateInstanceID()
 	daemonDone = make(chan struct{})
 
@@ -73,12 +72,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if daemonCmd != nil {
-		go monitorDaemon(daemonCmd)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if daemonCmd != nil {
+		go monitorDaemon(daemonCmd, cancel)
+	}
 
 	conn, err := connectWithRetry(ctx, cfg.SocketPath, 5)
 	if err != nil {
@@ -205,7 +204,11 @@ func startDaemonForInstance(instanceID string) (int, *exec.Cmd, error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	daemonPath := filepath.Join(filepath.Dir(execPath), "mayla-daemon")
+	daemonName := "mayla-daemon"
+	if runtime.GOOS == "windows" {
+		daemonName += ".exe"
+	}
+	daemonPath := filepath.Join(filepath.Dir(execPath), daemonName)
 
 	parentPID := os.Getpid()
 	cmd := exec.Command(daemonPath, instanceID, fmt.Sprintf("%d", parentPID))
@@ -221,25 +224,23 @@ func startDaemonForInstance(instanceID string) (int, *exec.Cmd, error) {
 
 func waitForDaemonReady(socketPath string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(socketPath); err == nil {
-			time.Sleep(100 * time.Millisecond)
+		conn, err := net.DialTimeout("unix", socketPath, 500*time.Millisecond)
+		if err == nil {
+			conn.Close()
 			return nil
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
-
 	return fmt.Errorf("daemon socket not ready after %v", timeout)
 }
 
-func monitorDaemon(cmd *exec.Cmd) {
+func monitorDaemon(cmd *exec.Cmd, cancelFunc context.CancelFunc) {
 	err := cmd.Wait()
 	close(daemonDone)
 
 	log.Printf("Daemon process exited: %v", err)
-	cleanup()
-	os.Exit(1)
+	cancelFunc()
 }
 
 func cleanup() {
@@ -312,6 +313,9 @@ func newStdinReader() *stdinReader {
 }
 
 func (r *stdinReader) readLoop() {
+	consecutiveErrors := 0
+	const maxConsecutiveErrors = 50
+
 	for {
 		select {
 		case <-r.done:
@@ -323,6 +327,25 @@ func (r *stdinReader) readLoop() {
 		err := r.decoder.Decode(&req)
 
 		if err != nil {
+			if err == io.EOF {
+				select {
+				case r.errors <- err:
+				case <-r.done:
+				}
+				return
+			}
+
+			consecutiveErrors++
+			if consecutiveErrors >= maxConsecutiveErrors {
+				select {
+				case r.errors <- fmt.Errorf("too many consecutive decode errors (%d): %w", consecutiveErrors, err):
+				case <-r.done:
+				}
+				return
+			}
+
+			time.Sleep(time.Duration(consecutiveErrors) * 10 * time.Millisecond)
+
 			select {
 			case r.errors <- err:
 			case <-r.done:
@@ -330,6 +353,8 @@ func (r *stdinReader) readLoop() {
 			}
 			continue
 		}
+
+		consecutiveErrors = 0
 
 		select {
 		case r.requests <- &req:

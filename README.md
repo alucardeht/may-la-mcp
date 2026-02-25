@@ -180,8 +180,15 @@ claude mcp add may-la -s user -- bash -c 'SCRIPT=$(mktemp); curl -sL https://raw
 ```
 
 **Windows (PowerShell):**
+
+**Step 1:** Download the launcher script (run once in PowerShell):
 ```powershell
-claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -Command "$script = [System.IO.Path]::GetTempFileName(); irm https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1 -OutFile $script; & $script; Remove-Item $script"
+$dir = "$env:USERPROFILE\.mayla"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; irm "https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1" -OutFile "$dir\mayla-launcher.ps1"
+```
+
+**Step 2:** Register MCP server:
+```powershell
+claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -File "%USERPROFILE%\.mayla\mayla-launcher.ps1"
 ```
 
 After installation:
