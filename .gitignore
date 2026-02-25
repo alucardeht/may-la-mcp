@@ -15,6 +15,11 @@ CLAUDE.md
 CLAUDE-PROJECT.md
 
 # Root-level compiled binaries (development artifacts)
-may-la
-mayla
-mayla-daemon
+/may-la
+/mayla
+/mayla-daemon
+
+# Tool-specific directories
+.serena/
+.workspace/
+.memory/

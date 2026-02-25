@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 type SocketListener struct {
@@ -34,6 +35,9 @@ func (sl *SocketListener) Start() error {
 	}
 
 	sl.listener = listener
+	if runtime.GOOS == "windows" {
+		return nil
+	}
 	return os.Chmod(sl.path, 0700)
 }
 

@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/alucardeht/may-la-mcp/internal/config"
@@ -183,11 +182,13 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("failed to register daemon: %w", err)
 	}
 
-	if err := os.Chmod(d.socketPath, 0700); err != nil {
-		d.lifecycle.Cleanup()
-		d.listener.Close()
-		os.Remove(d.socketPath)
-		return fmt.Errorf("failed to chmod socket: %w", err)
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(d.socketPath, 0700); err != nil {
+			d.lifecycle.Cleanup()
+			d.listener.Close()
+			os.Remove(d.socketPath)
+			return fmt.Errorf("failed to chmod socket: %w", err)
+		}
 	}
 
 	log.Info("listening on socket", "path", d.socketPath)
@@ -214,7 +215,6 @@ func (d *Daemon) Start() error {
 	}
 
 	go d.acceptConnections()
-	go d.handleSignals()
 
 	return nil
 }
@@ -408,20 +408,16 @@ func (d *Daemon) handleSingleRequest(raw json.RawMessage, encoder *json.Encoder,
 	}
 }
 
-func (d *Daemon) handleSignals() {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	<-sigChan
-	d.Shutdown()
-}
-
 func (d *Daemon) Shutdown() {
 	d.shutdownOnce.Do(func() {
 		log.Info("daemon shutting down")
 
 		d.shuttingDown.Store(true)
 		close(d.shutdown)
+
+		if d.listener != nil {
+			d.listener.Close()
+		}
 
 		done := make(chan struct{})
 		go func() {
@@ -436,17 +432,13 @@ func (d *Daemon) Shutdown() {
 			log.Warn("shutdown timeout reached, forcing close")
 		}
 
-		d.cleanupComponents()
-
-		if d.listener != nil {
-			d.listener.Close()
-		}
-
 		d.connMu.Lock()
 		for conn := range d.connections {
 			conn.Close()
 		}
 		d.connMu.Unlock()
+
+		d.cleanupComponents()
 
 		os.Remove(d.socketPath)
 		d.lifecycle.Cleanup()

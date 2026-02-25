@@ -2,7 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $REPO = "alucardeht/may-la-mcp"
 $INSTALL_DIR = "$env:USERPROFILE\.mayla"
-$BINARY = "$INSTALL_DIR\mayla-daemon.exe"
+$MAYLA_CLI = "$INSTALL_DIR\mayla.exe"
+$MAYLA_DAEMON = "$INSTALL_DIR\mayla-daemon.exe"
 $VERSION_FILE = "$INSTALL_DIR\version"
 
 if (-not (Test-Path $INSTALL_DIR)) {
@@ -22,18 +23,27 @@ function Get-Platform {
     $arch = if ([Environment]::Is64BitOperatingSystem) {
         if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
     } else { "amd64" }
-    return "windows-$arch"
+    return "windows_$arch"
 }
 
-function Download-Binary {
+function Download-Binaries {
     param([string]$Version)
 
-    $platform = Get-Platform
-    $url = "https://github.com/$REPO/releases/download/$Version/mayla-daemon-$platform.exe"
+    Get-Process -Name "mayla-daemon" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
 
-    Write-Host "Downloading May-la $Version for $platform..." -ForegroundColor Cyan
-    Invoke-WebRequest -Uri $url -OutFile "$BINARY.tmp" -ErrorAction Stop
-    Move-Item -Path "$BINARY.tmp" -Destination $BINARY -Force
+    $platform = Get-Platform
+
+    $cliUrl = "https://github.com/$REPO/releases/download/$Version/mayla-$platform.exe"
+    Write-Host "Downloading mayla CLI $Version for $platform..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $cliUrl -OutFile "$MAYLA_CLI.tmp" -ErrorAction Stop
+    Move-Item -Path "$MAYLA_CLI.tmp" -Destination $MAYLA_CLI -Force
+
+    $daemonUrl = "https://github.com/$REPO/releases/download/$Version/mayla-daemon-$platform.exe"
+    Write-Host "Downloading mayla-daemon $Version for $platform..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $daemonUrl -OutFile "$MAYLA_DAEMON.tmp" -ErrorAction Stop
+    Move-Item -Path "$MAYLA_DAEMON.tmp" -Destination $MAYLA_DAEMON -Force
+
     Set-Content -Path $VERSION_FILE -Value $Version
 }
 
@@ -42,15 +52,15 @@ function Update-IfNeeded {
     $current = if (Test-Path $VERSION_FILE) { Get-Content $VERSION_FILE } else { $null }
 
     if (-not $latest) {
-        if (Test-Path $BINARY) { return }
-        Write-Error "Cannot fetch latest version and no local binary found"
+        if ((Test-Path $MAYLA_CLI) -and (Test-Path $MAYLA_DAEMON)) { return }
+        Write-Error "Cannot fetch latest version and no local binaries found"
         exit 1
     }
 
-    if ($latest -ne $current -or -not (Test-Path $BINARY)) {
-        Download-Binary -Version $latest
+    if ($latest -ne $current -or -not (Test-Path $MAYLA_CLI) -or -not (Test-Path $MAYLA_DAEMON)) {
+        Download-Binaries -Version $latest
     }
 }
 
 Update-IfNeeded
-& $BINARY @args
+& $MAYLA_CLI @args

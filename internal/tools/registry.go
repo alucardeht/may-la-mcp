@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/alucardeht/may-la-mcp/internal/logger"
 )
+
+var log = logger.ForComponent("tools")
 
 type Tool interface {
 	Name() string
@@ -71,22 +75,25 @@ func (r *Registry) ExecuteWithTimeout(name string, input json.RawMessage, timeou
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	resultChan := make(chan struct {
-		result interface{}
-		err    error
-	}, 1)
+	type result struct {
+		value interface{}
+		err   error
+	}
+
+	resultChan := make(chan result, 1)
 
 	go func() {
-		result, err := r.Execute(ctx, name, input)
-		resultChan <- struct {
-			result interface{}
-			err    error
-		}{result, err}
+		value, err := r.Execute(ctx, name, input)
+		select {
+		case resultChan <- result{value, err}:
+		default:
+			log.Warn("tool execution completed after timeout", "tool", name)
+		}
 	}()
 
 	select {
 	case res := <-resultChan:
-		return res.result, res.err
+		return res.value, res.err
 	case <-ctx.Done():
 		return nil, fmt.Errorf("tool execution timeout after %v", timeout)
 	}
