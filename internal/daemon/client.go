@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 )
@@ -40,6 +41,11 @@ func (c *Client) SendRequest(req *protocol.JSONRPCRequest) (*protocol.JSONRPCRes
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if err := c.conn.SetWriteDeadline(time.Now().Add(30 * time.Second)); err != nil {
+		c.healthy.Store(false)
+		return nil, fmt.Errorf("set write deadline: %w", err)
+	}
+
 	if err := c.encoder.Encode(req); err != nil {
 		c.healthy.Store(false)
 		return nil, err
@@ -47,6 +53,11 @@ func (c *Client) SendRequest(req *protocol.JSONRPCRequest) (*protocol.JSONRPCRes
 	if err := c.writer.Flush(); err != nil {
 		c.healthy.Store(false)
 		return nil, err
+	}
+
+	if err := c.conn.SetReadDeadline(time.Now().Add(5 * time.Minute)); err != nil {
+		c.healthy.Store(false)
+		return nil, fmt.Errorf("set read deadline: %w", err)
 	}
 
 	var resp protocol.JSONRPCResponse
