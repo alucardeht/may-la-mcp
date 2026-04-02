@@ -1,25 +1,44 @@
+# Build artifacts
 bin/
+dist/
+
+# Compiled binaries at root (development artifacts)
+/may-la
+/may-la-mcp
+/mayla
+/mayla-daemon
+
+# Shared libraries
 *.exe
 *.dll
 *.so
 *.dylib
-.DS_Store
+
+# Databases
 *.db
+
+# Environment
 .env
 .env.local
-dist/
+
+# OS files
+.DS_Store
+
+# Logs
 *.log
+
+# Test coverage
 coverage.txt
-CLAUDE-GLOBAL.md
+
+# Claude Code context files
 CLAUDE.md
+CLAUDE-GLOBAL.md
 CLAUDE-PROJECT.md
 
-# Root-level compiled binaries (development artifacts)
-/may-la
-/mayla
-/mayla-daemon
-
-# Tool-specific directories
-.serena/
+# Session artifacts
 .workspace/
 .memory/
+.serena/
+
+# npm (inside npm/ the package has its own .npmignore)
+npm/node_modules/

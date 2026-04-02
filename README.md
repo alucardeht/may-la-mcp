@@ -166,133 +166,59 @@ Each workspace gets a unique instance ID based on its absolute path. This ensure
 - PID files track running processes
 - Per-workspace isolation = no cross-workspace conflicts
 
-## 🛠 Installation
+## Installation
 
-May-la works with any MCP-compatible IDE. Choose your IDE below:
+May-la works with any MCP-compatible client. Install in two steps:
 
-### For Claude Code
+### Step 1: Install via npm
 
-**One-line installation:**
-
-**macOS / Linux:**
 ```bash
-claude mcp add may-la -s user -- bash -c 'SCRIPT=$(mktemp); curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh > "$SCRIPT"; bash "$SCRIPT"; rm "$SCRIPT"'
+npm install -g @alucardeht/may-la-mcp
 ```
 
-**Windows (PowerShell):**
+This downloads the correct Go binary for your platform and places it in `~/.mayla/`. You'll see the download progress and a ready message when done.
 
-**Step 1:** Download the launcher script (run once in PowerShell):
-```powershell
-$dir = "$env:USERPROFILE\.mayla"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; irm "https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1" -OutFile "$dir\mayla-launcher.ps1"
+### Step 2: Add to your MCP client
+
+**Claude Code:**
+```bash
+claude mcp add may-la -- may-la-mcp
 ```
 
-**Step 2:** Register MCP server:
-```powershell
-claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -File "$HOME\.mayla\mayla-launcher.ps1"
+**Gemini CLI:**
+```bash
+gemini mcp add may-la -- may-la-mcp
 ```
 
-After installation:
-1. Restart Claude Code: `/quit` then restart
-2. Verify installation (see Validation section below)
-
-### For Cursor
-
-**Step 1: Install binaries**
-
-Run the same installation command as Claude Code above (it downloads the binaries to `~/.mayla/`).
-
-**Step 2: Configure Cursor**
-
-Add to your Cursor settings (`~/.cursor/mcp.json` or via Settings → MCP):
-
-> **Important**: The tilde (`~`) does not expand in JSON. Use the absolute path to your home directory instead.
-
-**macOS:**
+**Cursor** (add to `~/.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
     "may-la": {
-      "command": "/Users/YOUR_USERNAME/.mayla/mayla",
+      "command": "may-la-mcp",
       "args": []
     }
   }
 }
 ```
 
-**Linux:**
-```json
-{
-  "mcpServers": {
-    "may-la": {
-      "command": "/home/YOUR_USERNAME/.mayla/mayla",
-      "args": []
-    }
-  }
-}
-```
+**Other MCP clients:**
+Point to the command `may-la-mcp`.
 
-**Windows:**
-```json
-{
-  "mcpServers": {
-    "may-la": {
-      "command": "C:\\Users\\YOUR_USERNAME\\.mayla\\mayla.exe",
-      "args": []
-    }
-  }
-}
-```
-
-Replace `YOUR_USERNAME` with your actual username.
-
-**Step 3: Restart Cursor**
-
-Restart Cursor to load the MCP server.
-
-### For Gemini CLI
-
-**One-liner installation:**
-
-**macOS / Linux:**
-```bash
-gemini mcp add may-la -s user -- bash -c 'SCRIPT=$(mktemp); curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh > "$SCRIPT"; bash "$SCRIPT"; rm "$SCRIPT"'
-```
-
-**Verify installation:**
-```bash
-gemini mcp list
-```
-
-You should see `may-la` in the list of configured MCP servers.
-
-> **Note**: The launcher script automatically downloads the binaries to `~/.mayla/` if they don't exist, and keeps them updated.
-
-### What Happens During Installation
-
-1. Launcher script downloads from GitHub
-2. Detects your platform (OS + architecture)
-3. Downloads **both** pre-compiled binaries for your platform:
-   - `mayla` (CLI client) - ~6-7MB
-   - `mayla-daemon` (background server) - ~6-8MB
-4. Stores in `~/.mayla/` directory (or `%USERPROFILE%\.mayla\` on Windows)
-5. Creates per-workspace instances in `~/.mayla/instances/` for isolation
-6. For macOS: Removes quarantine attributes to prevent Gatekeeper blocks
-7. Auto-updates when new versions are released
+That's it. Restart your client and you're ready.
 
 ### Supported Platforms
 
-| OS | Architecture | Status | Binary Size | Notes |
-|----|--------------|--------|-------------|-------|
-| **macOS** | Apple Silicon (arm64) | ✅ Full CGO | ~6-7 MB | SQLite FTS5 enabled |
-| **macOS** | Intel (amd64) | ✅ Full CGO | ~6-7 MB | SQLite FTS5 enabled |
-| **Linux** | amd64 | ✅ Full CGO | ~6-7 MB | SQLite FTS5 enabled |
-| **Windows** | amd64 | ✅ Full CGO | ~6-7 MB | SQLite FTS5 enabled |
+| OS | Architecture | Status |
+|----|-------------|--------|
+| macOS | Apple Silicon (arm64) | Supported |
+| macOS | Intel (amd64) | Supported |
+| Linux | amd64 | Supported |
+| Windows | amd64 | Supported |
 
-> **Note**: ARM64 builds for Linux/Windows are not provided due to CGO cross-compilation complexity. Native compilation on those platforms would require specialized toolchains.
+> ARM64 builds for Linux/Windows are not available due to CGO cross-compilation constraints.
 
-### Build from Source (Optional)
-
-If you prefer to build yourself:
+### Alternative: Build from Source
 
 ```bash
 git clone https://github.com/alucardeht/may-la-mcp.git
@@ -300,7 +226,24 @@ cd may-la-mcp
 make build-all
 ```
 
-Requirements: Go 1.22+
+Requirements: Go 1.22+, CGO enabled.
+
+### Alternative: Shell Launcher (legacy)
+
+If you prefer not to use npm:
+
+**macOS / Linux:**
+```bash
+claude mcp add may-la -s user -- bash -c 'SCRIPT=$(mktemp); curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh > "$SCRIPT"; bash "$SCRIPT"; rm "$SCRIPT"'
+```
+
+**Windows (PowerShell):**
+```powershell
+$dir = "$env:USERPROFILE\.mayla"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; irm "https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1" -OutFile "$dir\mayla-launcher.ps1"
+claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -File "$HOME\.mayla\mayla-launcher.ps1"
+```
+
+> Note: The shell launcher approach downloads binaries at MCP startup, which may cause timeouts on first run. The npm method is recommended because it downloads during install, not at runtime.
 
 ## ✅ Validation
 
@@ -362,6 +305,11 @@ Should see `ws-<hash>` directory for current workspace. If working in multiple p
 - Binaries not in expected location
 - Check: `ls -la ~/.mayla/`
 - Solution: Re-run installation command
+
+**npm install succeeded but `may-la-mcp` not found**
+- Global npm bin directory may not be in PATH
+- Check: `npm bin -g`
+- Solution: Add the directory to your PATH, or use `npx may-la-mcp`
 
 **macOS: "Cannot be opened because the developer cannot be verified"**
 - Quarantine attributes not removed properly
@@ -494,6 +442,10 @@ may-la-mcp/
 │   │   └── memory/            # Memory system
 │   ├── types/                 # Shared type definitions
 │   └── watcher/               # File system watcher (fsnotify)
+├── npm/                       # npm package wrapper
+│   ├── package.json           # @alucardeht/may-la-mcp
+│   ├── install.js             # Postinstall binary downloader
+│   └── cli.js                 # CLI wrapper (spawns Go binary)
 ├── tests/                     # E2E tests
 ├── Makefile                   # Build automation
 └── README.md
