@@ -174,8 +174,7 @@ function removeQuarantine(filePath) {
 function binaryExists(installDir, platform) {
   const suffix = platform === 'windows' ? '.exe' : '';
   const maylaPath = path.join(installDir, `mayla${suffix}`);
-  const daemonPath = path.join(installDir, `mayla-daemon${suffix}`);
-  return fs.existsSync(maylaPath) && fs.existsSync(daemonPath);
+  return fs.existsSync(maylaPath);
 }
 
 function printHeader(platform, arch, version) {
@@ -239,11 +238,6 @@ async function main() {
       name: 'mayla',
       url: buildDownloadUrl('mayla', version, platform, arch),
       dest: path.join(installDir, `mayla${suffix}`),
-    },
-    {
-      name: 'mayla-daemon',
-      url: buildDownloadUrl('mayla-daemon', version, platform, arch),
-      dest: path.join(installDir, `mayla-daemon${suffix}`),
     },
   ];
 

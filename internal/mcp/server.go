@@ -20,89 +20,38 @@ func NewServer(registry *tools.Registry) *Server {
 	}
 }
 
-func (s *Server) HandleRequest(req *Request) *Response {
-	return s.handler.Handle(req)
-}
-
-func (s *Server) HandleBatch(batch []Request) []*Response {
-	responses := make([]*Response, 0, len(batch))
-	for _, req := range batch {
-		resp := s.HandleRequest(&req)
-		if req.ID != nil {
-			responses = append(responses, resp)
-		}
-	}
-	return responses
-}
-
 func (s *Server) ProcessStream(reader io.Reader, writer io.Writer) error {
 	decoder := json.NewDecoder(reader)
-	encoder := json.NewEncoder(writer)
+	fw := protocol.NewFlushWriter(writer)
+	encoder := json.NewEncoder(fw)
 
 	for {
-		var raw json.RawMessage
-		if err := decoder.Decode(&raw); err != nil {
+		var req Request
+		if err := decoder.Decode(&req); err != nil {
 			if err == io.EOF {
 				return nil
 			}
 			resp := &Response{
 				JSONRPC: "2.0",
-				ID:      nil,
 				Error: &protocol.JSONRPCError{
 					Code:    -32700,
 					Message: "Parse error",
 				},
 			}
 			encoder.Encode(resp)
+			fw.Flush()
 			continue
 		}
 
-		if len(raw) == 0 {
+		if req.ID == nil && req.Method != "initialize" {
+			s.handler.Handle(&req)
 			continue
 		}
 
-		if raw[0] == '[' {
-			var batch []Request
-			if err := json.Unmarshal(raw, &batch); err != nil {
-				resp := &Response{
-					JSONRPC: "2.0",
-					ID:      nil,
-					Error: &protocol.JSONRPCError{
-						Code:    -32700,
-						Message: "Parse error",
-					},
-				}
-				encoder.Encode(resp)
-				continue
-			}
-
-			responses := s.HandleBatch(batch)
-			if err := encoder.Encode(responses); err != nil {
-				return err
-			}
-		} else {
-			var req Request
-			if err := json.Unmarshal(raw, &req); err != nil {
-				resp := &Response{
-					JSONRPC: "2.0",
-					ID:      nil,
-					Error: &protocol.JSONRPCError{
-						Code:    -32700,
-						Message: "Parse error",
-					},
-				}
-				encoder.Encode(resp)
-				continue
-			}
-
-			resp := s.HandleRequest(&req)
-			if err := encoder.Encode(resp); err != nil {
-				return err
-			}
+		resp := s.handler.Handle(&req)
+		if err := encoder.Encode(resp); err != nil {
+			return err
 		}
+		fw.Flush()
 	}
-}
-
-func (s *Server) Registry() *tools.Registry {
-	return s.registry
 }

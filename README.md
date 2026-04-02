@@ -1,188 +1,54 @@
 # May-la MCP
 
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go)](https://golang.org)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-3178c6?style=flat-square)](https://spec.modelcontextprotocol.io)
-[![Performance](https://img.shields.io/badge/Cold%20Start-%3C%2050ms-brightgreen?style=flat-square)](docs/performance.md)
+A lean, fast MCP server for code search and navigation. Written in Go, installed via npm.
 
-**A high-performance MCP (Model Context Protocol) server written in Go**, engineered as a faster, more efficient alternative to SERENA MCP. Deliver powerful code navigation, file manipulation, and semantic search capabilities with lightning-fast response times.
+**2.7 MB binary. 5 tools. Instant startup. Zero dependencies.**
 
-## 🚀 Why May-la?
+## What it does
 
-| Feature | May-la | SERENA |
-|---------|--------|--------|
-| **Cold Start** | < 50ms | 2-5s |
-| **Tool Overhead** | < 10ms | ~200ms |
-| **Memory Footprint** | < 50MB | 200-500MB |
-| **Language** | Go (compiled) | Python (interpreted) |
-| **Startup Latency** | Negligible | Multi-second |
+LLMs waste too many tool calls searching for code. May-la fixes that — each tool returns maximum useful context per call, so the model understands your codebase in 2-3 calls instead of 7+.
 
-May-la is purpose-built for Claude-Claude operations where response time directly impacts user experience. Every millisecond counts.
+## Tools
 
-## 📋 Features
+### `info` — Project overview in one call
+Tech stack detection, directory tree, file distribution, entry points. One call and the model knows where everything is.
 
-### 20 Production-Ready Tools Across 5 Categories
+### `read` — Smart file reading
+Read files with automatic structural summary (functions, types, exports). Supports batch reading (multiple files in one call), line ranges, and reading a specific symbol by name.
 
-#### 📁 File Operations (7 tools)
-- **`read`** — Read files with intelligent chunking and progress tracking
-- **`write`** — Write files with atomic operations and safety checks
-- **`edit`** — Edit files using search/replace with regex support
-- **`create`** — Create new files with directory structure validation
-- **`delete`** — Remove files and directories safely
-- **`move`** — Move and rename files
-- **`list`** — List directory contents with filtering and sorting
+### `search` — Search with function-level context
+Search by term or regex. Instead of returning just the matching line, returns the **entire function** containing the match. Eliminates the grep-then-read loop.
 
-#### 🔍 Search & Navigation (4 tools)
-- **`search`** — Full-text search powered by ripgrep with context
-- **`find`** — Find files by pattern (glob/regex)
-- **`symbols`** — Extract code symbols with semantic intelligence (LSP → Index → Regex fallback)
-- **`references`** — Find symbol references across codebase with LSP support
+### `find` — File discovery with metadata
+Find files by glob pattern. Results grouped by directory with file sizes. Respects `.gitignore`.
 
-#### 💾 Memory System (6 tools)
-- **`memory_write`** — Save long-term memory with auto-versioning
-- **`memory_read`** — Retrieve memories by name and version
-- **`memory_list`** — List all stored memories with metadata
-- **`memory_search`** — Semantic search over memories using FTS5
-- **`memory_delete`** — Remove memories with safety checks
-- **`memory_update`** — Update existing memory content, category, or tags with partial updates and append mode
-
-#### 📄 Documentation (2 tools)
-- **`doc_write`** — Write project documentation files with automatic directory creation
-- **`doc_read`** — Read project documentation files
-
-#### 🏥 System (1 tool)
-- **`health`** — Check daemon status and version
-
-### 🏷️ Tool Annotations
-
-All tools include MCP annotations for smarter client integration:
-
-| Annotation | Description |
-|------------|-------------|
-| `readOnlyHint` | Tool only reads data, no side effects |
-| `destructiveHint` | Tool can delete or permanently modify data |
-| `idempotentHint` | Tool can be safely retried with same result |
-| `openWorldHint` | Tool may return evolving/dynamic results |
-
-## 🧠 Semantic Code Intelligence
-
-May-la provides intelligent code understanding through a 3-tier semantic analysis system:
-
-### Architecture
-
-```
-Query → Index (SQLite FTS5) → LSP Server → Regex Fallback
-              ↓                    ↓              ↓
-         Cached symbols      Language        Pattern-based
-         (sub-ms lookup)     Analysis        extraction
-```
-
-### Supported Language Servers
-
-| Language | LSP Server | Status | Extensions |
-|----------|-----------|--------|------------|
-| Go | gopls | ✅ Enabled | `.go` |
-| TypeScript | typescript-language-server | ✅ Enabled | `.ts`, `.tsx` |
-| JavaScript | typescript-language-server | ✅ Enabled | `.js`, `.jsx`, `.mjs` |
-| Python | pylsp | ✅ Enabled | `.py` |
-| Rust | rust-analyzer | ✅ Enabled | `.rs` |
-| C/C++ | clangd | ✅ Enabled | `.c`, `.cpp`, `.h` |
-| Java | jdtls | ⚠️ Disabled | `.java` |
-
-### SQLite FTS5 Index
-
-- Automatic symbol indexing with full-text search
-- Sub-millisecond lookups for cached results
-- Background incremental updates via file watching
-
-### Encoding Support (30+)
-
-Automatic encoding detection and normalization:
-- **Unicode:** UTF-8, UTF-16 LE/BE (with BOM support)
-- **Asian:** Shift-JIS, EUC-JP, GBK, GB18030, Big5, EUC-KR
-- **Latin:** ISO-8859-1 through 16, Windows-1250 through 1258
-- **Cyrillic:** KOI8-R, KOI8-U
-
-## 🏗 Architecture Overview
-
-### Per-Workspace Daemon Isolation
-
-May-la uses a **workspace-based instance isolation system** to support multiple simultaneous projects without conflicts:
-
-#### Instance ID Generation
-```
-workspace_path → SHA-256 hash → ws-<16-char-hex>
-Example: /projects/my-app → ws-a1b2c3d4e5f6g7h8
-```
-
-Each workspace gets a unique instance ID based on its absolute path. This ensures:
-- Multiple projects can run simultaneously
-- No socket/database conflicts
-- Clean resource isolation
-
-#### Instance Directory Structure
-```
-~/.mayla/
-├── instances/
-│   ├── ws-a1b2c3d4e5f6g7h8/     # Instance for workspace A
-│   │   ├── daemon.sock           # Unix socket
-│   │   ├── daemon.lock           # Lock file (prevents conflicts)
-│   │   ├── daemon.pid            # Process ID tracking
-│   │   ├── workspace.path        # Original workspace path
-│   │   ├── memory.db             # Per-workspace memory
-│   │   ├── index.db              # Per-workspace symbol index
-│   │   └── mayla.db              # Per-workspace database
-│   └── ws-x9y8z7w6v5u4t3s2/     # Instance for workspace B
-│       └── ... (isolated resources)
-├── logs/
-│   ├── daemon-ws-a1b2c3d4e5f6g7h8.log
-│   └── daemon-ws-x9y8z7w6v5u4t3s2.log
-├── mayla                         # CLI binary
-└── mayla-daemon                  # Daemon binary
-```
-
-#### Daemon Lifecycle Management
-
-**Startup:**
-1. CLI generates instance ID from current workspace path
-2. Acquires lock file (`daemon.lock`) to prevent race conditions
-3. Checks if existing daemon is healthy for this workspace
-4. Starts new daemon if needed, passing instance ID and parent PID
-
-**PPID Monitoring:**
-- Daemon monitors parent process (CLI) via PPID
-- If parent dies, waits 30 seconds for recovery
-- If still dead, performs graceful shutdown
-- Prevents orphaned daemon processes
-
-**Cleanup:**
-- Automatic cleanup of stale instances (>60 minutes old)
-- Workspace deletion detection via `workspace.path` file
-- Socket health checks before cleanup
-- See `scripts/cleanup-stale-instances.sh` for details
-
-**Concurrency:**
-- Lock files prevent simultaneous daemon starts
-- PID files track running processes
-- Per-workspace isolation = no cross-workspace conflicts
+### `symbols` — Code structure extraction
+Extract functions, classes, types, interfaces, methods from files or directories. Supports Go, TypeScript, JavaScript, Python, Java, Rust, and C/C++. No LSP required — uses fast regex extraction.
 
 ## Installation
 
-May-la works with any MCP-compatible client. Install in two steps:
-
-### Step 1: Install via npm
+### Step 1: Install
 
 ```bash
 npm install -g @alucardeht/may-la-mcp
 ```
 
-This downloads the correct Go binary for your platform and places it in `~/.mayla/`. You'll see the download progress and a ready message when done.
-
-### Step 2: Add to your MCP client
+### Step 2: Add to your client
 
 **Claude Code:**
 ```bash
 claude mcp add may-la -- may-la-mcp
+```
+
+**Cursor** (`~/.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "may-la": {
+      "command": "may-la-mcp"
+    }
+  }
+}
 ```
 
 **Gemini CLI:**
@@ -190,499 +56,116 @@ claude mcp add may-la -- may-la-mcp
 gemini mcp add may-la -- may-la-mcp
 ```
 
-**Cursor** (add to `~/.cursor/mcp.json`):
-```json
-{
-  "mcpServers": {
-    "may-la": {
-      "command": "may-la-mcp",
-      "args": []
-    }
-  }
-}
-```
-
-**Other MCP clients:**
-Point to the command `may-la-mcp`.
-
-That's it. Restart your client and you're ready.
+**Other clients:** point to the command `may-la-mcp`.
 
 ### Supported Platforms
 
-| OS | Architecture | Status |
-|----|-------------|--------|
-| macOS | Apple Silicon (arm64) | Supported |
-| macOS | Intel (amd64) | Supported |
-| Linux | amd64 | Supported |
-| Windows | amd64 | Supported |
+| OS | Architecture |
+|----|-------------|
+| macOS | arm64, amd64 |
+| Linux | amd64 |
+| Windows | amd64 |
 
-> ARM64 builds for Linux/Windows are not available due to CGO cross-compilation constraints.
-
-### Alternative: Build from Source
+### Build from source
 
 ```bash
 git clone https://github.com/alucardeht/may-la-mcp.git
 cd may-la-mcp
-make build-all
+make build
+# Binary at bin/mayla
 ```
 
-Requirements: Go 1.22+, CGO enabled.
+Requires Go 1.22+. No CGO needed.
 
-### Alternative: Shell Launcher (legacy)
-
-If you prefer not to use npm:
-
-**macOS / Linux:**
-```bash
-claude mcp add may-la -s user -- bash -c 'SCRIPT=$(mktemp); curl -sL https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.sh > "$SCRIPT"; bash "$SCRIPT"; rm "$SCRIPT"'
-```
-
-**Windows (PowerShell):**
-```powershell
-$dir = "$env:USERPROFILE\.mayla"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; irm "https://raw.githubusercontent.com/alucardeht/may-la-mcp/main/scripts/mayla-launcher.ps1" -OutFile "$dir\mayla-launcher.ps1"
-claude mcp add may-la -s user -- powershell -ExecutionPolicy Bypass -File "$HOME\.mayla\mayla-launcher.ps1"
-```
-
-> Note: The shell launcher approach downloads binaries at MCP startup, which may cause timeouts on first run. The npm method is recommended because it downloads during install, not at runtime.
-
-## ✅ Validation
-
-**How to verify May-la is working correctly:**
-
-### Quick Test
-
-In Claude Code or Cursor, try any of these MCP tools:
-
-```
-Use may-la to list files in current directory
-```
-
-or
-
-```
-Use may-la to read README.md
-```
-
-### Detailed Verification
-
-**Step 1: Check binaries are installed**
-```bash
-ls -lh ~/.mayla/
-```
-
-Expected output:
-```
--rwxr-xr-x  mayla          (~6-7 MB)
--rwxr-xr-x  mayla-daemon   (~6-8 MB)
-```
-
-**Step 2: Test MCP connection**
-
-In Claude Code:
-```
-/mcp list
-```
-
-You should see `may-la` in the list of available servers.
-
-**Step 3: Verify instance isolation**
+## Verify
 
 ```bash
-# Check current workspace instance
-ls ~/.mayla/instances/
+# Check binary is installed
+ls -lh ~/.mayla/mayla
+
+# Test MCP protocol
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"test","version":"1.0"}}}' | may-la-mcp
 ```
 
-Should see `ws-<hash>` directory for current workspace. If working in multiple projects, you should see multiple instance directories.
+In Claude Code: `/mcp` should show `may-la` in the list.
 
-### Common Issues
-
-**"Failed to connect to daemon"**
-- Daemon may not have started properly
-- Check: `ps aux | grep mayla-daemon`
-- Solution: Restart your IDE
-
-**"Command not found: mayla"**
-- Binaries not in expected location
-- Check: `ls -la ~/.mayla/`
-- Solution: Re-run installation command
-
-**npm install succeeded but `may-la-mcp` not found**
-- Global npm bin directory may not be in PATH
-- Check: `npm bin -g`
-- Solution: Add the directory to your PATH, or use `npx may-la-mcp`
-
-**macOS: "Cannot be opened because the developer cannot be verified"**
-- Quarantine attributes not removed properly
-- Solution: `xattr -d com.apple.quarantine ~/.mayla/mayla ~/.mayla/mayla-daemon`
-
-**Windows: "Access Denied"**
-- Antivirus blocking execution
-- Solution: Add `%USERPROFILE%\.mayla\` to antivirus exclusions
-
-## 📖 Quick Start
-
-### 1. Automatic Daemon Management
-
-The daemon is automatically managed by the `mayla` CLI. You don't need to start it manually.
-
-```bash
-# Daemon starts automatically when you use may-la tools
-# Each workspace gets its own daemon instance
-```
-
-> **Note:** The `mayla` CLI automatically:
-> - Generates workspace-based instance ID
-> - Checks for existing healthy daemon
-> - Starts new daemon if needed
-> - Manages daemon lifecycle
-
-For advanced users who need manual control:
-```bash
-# Manual daemon start (rarely needed)
-mayla-daemon <instance-id> [parent-pid]
-```
-
-### 2. Make Tool Calls
-
-All communication happens via standard MCP protocol. Claude handles this automatically once registered.
+## Architecture
 
 ```
-Tool: read
-Input:
-  path: "/path/to/file.go"
-  max_lines: 100
+MCP Client (Claude, Cursor, etc.)
+    ↓ stdio
+may-la-mcp (Node wrapper)
+    ↓ spawn
+mayla (Go binary, 2.7 MB)
+    ↓
+5 read-only tools
 ```
 
-### 3. Example: File Navigation
+No daemon. No database. No LSP servers. The binary starts, handles requests over stdio, and exits when the client disconnects.
 
-```
-Tool: list
-Input:
-  path: "."
-  pattern: "*.go"
-  recursive: true
-```
+### Symbol extraction
 
-```
-Tool: search
-Input:
-  query: "func handleRequest"
-  path: "."
-```
+Regex-based extraction for 7 languages — no language servers needed:
 
-```
-Tool: symbols
-Input:
-  path: "internal/tools/files/reader.go"
-  language: "go"
-```
+| Language | Symbols detected |
+|----------|-----------------|
+| Go | functions, methods, types, interfaces, consts |
+| TypeScript/JavaScript | functions, classes, interfaces, types, methods, arrow functions |
+| Python | functions, classes, methods |
+| Java | classes, interfaces, methods |
+| Rust | functions, methods, structs, traits, enums, consts |
+| C/C++ | functions, structs, unions, enums, defines |
 
-## 🔧 Instance Management
+### .gitignore aware
 
-### Viewing Active Instances
+All tools respect `.gitignore` and skip common junk directories (`node_modules`, `vendor`, `__pycache__`, `dist`, `.git`, etc.).
 
-```bash
-ls -la ~/.mayla/instances/
-```
-
-Each directory represents a workspace instance (named `ws-<hash>`).
-
-### Checking Instance Health
-
-```bash
-# View instance logs
-tail -f ~/.mayla/logs/daemon-ws-*.log
-
-# Check which workspace an instance belongs to
-cat ~/.mayla/instances/ws-*/workspace.path
-```
-
-### Manual Cleanup
-
-```bash
-# Cleanup stale instances (>60 min old, workspace deleted, or unhealthy)
-bash scripts/cleanup-stale-instances.sh
-
-# Remove specific instance
-rm -rf ~/.mayla/instances/ws-<instance-id>
-```
-
-### Resource Usage
-
-- **Per instance overhead:** ~50MB base, <100MB under load
-- **Shared binaries:** ~13-15MB total (mayla + mayla-daemon)
-- **Total for 5 workspaces:** ~50MB binaries + (5 × 50MB instances) = ~300MB
-
-Multiple workspace support does NOT significantly increase memory usage beyond per-instance isolation.
-
-## 🏗 Project Structure
+## Project Structure
 
 ```
 may-la-mcp/
-├── cmd/
-│   ├── mayla/                 # MCP stdio adapter
-│   └── mayla-daemon/          # Background daemon (Unix socket)
+├── cmd/mayla/             # Entry point (stdio MCP server)
 ├── internal/
-│   ├── config/                # Configuration management
-│   ├── daemon/                # Socket server, JSON-RPC handling
-│   ├── index/                 # SQLite FTS5 symbol indexing
-│   │   ├── store.go           # Database operations
-│   │   ├── worker.go          # Background indexer
-│   │   └── encoder.go         # Encoding detection (30+ encodings)
-│   ├── logger/                # Structured logging (slog)
-│   ├── lsp/                   # Language Server Protocol
-│   │   ├── manager.go         # LSP lifecycle management
-│   │   ├── client.go          # JSON-RPC client
-│   │   └── config.go          # LSP configurations
-│   ├── mcp/                   # MCP protocol handler
-│   ├── router/                # Query routing (Index → LSP → Regex)
-│   ├── tools/
-│   │   ├── files/             # File operations
-│   │   ├── search/            # Search & navigation
-│   │   └── memory/            # Memory system
-│   ├── types/                 # Shared type definitions
-│   └── watcher/               # File system watcher (fsnotify)
-├── npm/                       # npm package wrapper
-│   ├── package.json           # @alucardeht/may-la-mcp
-│   ├── install.js             # Postinstall binary downloader
-│   └── cli.js                 # CLI wrapper (spawns Go binary)
-├── tests/                     # E2E tests
-├── Makefile                   # Build automation
-└── README.md
+│   ├── mcp/               # MCP protocol (JSON-RPC)
+│   ├── tools/             # The 5 tools
+│   ├── lang/              # Regex symbol extractors (7 languages)
+│   ├── gitignore/         # .gitignore parser
+│   └── encoding/          # File encoding (UTF-8, UTF-16)
+├── pkg/
+│   ├── protocol/          # JSON-RPC types
+│   └── version/           # Version info
+├── npm/                   # npm package wrapper
+├── scripts/               # Installation scripts
+└── Makefile
 ```
 
-## 🔧 Development
-
-### Build Commands
+## Development
 
 ```bash
-# Build everything
-make build
-
-# Build daemon only
-make daemon
-
-# Build CLI tool
-make cli
-
-# Run unit tests
-make test
-
-# Run E2E tests
-make test-e2e
-
-# Clean build artifacts
-make clean
-
-# Install locally
-make install
+make build      # Build binary
+make test       # Run tests
+make install    # Install to /usr/local/bin
+make fmt        # Format code
+make lint       # Run linter
 ```
 
-### Configuration
+## Troubleshooting
 
-Create `~/.mayla/config.yaml`:
+**`may-la-mcp` not found after npm install**
+- npm global bin dir may not be in PATH
+- Check: `npm bin -g`
+- Fix: add that directory to your PATH
 
-```yaml
-socket: /tmp/mayla.sock
-memory_dir: ~/.mayla/memories
-log_level: info
-max_chunk_size: 10000
-search:
-  exclude_patterns:
-    - "*.git"
-    - "node_modules"
-    - "__pycache__"
-```
-
-## 📊 Performance Characteristics
-
-### Benchmarks
-
-| Operation | Latency | Memory |
-|-----------|---------|--------|
-| Cold Start | < 50ms | - |
-| `read` (1MB file) | ~15ms | +2MB |
-| `search` (1000 files) | ~80ms | +5MB |
-| `symbols` (large file) | ~25ms | +3MB |
-| `memory_search` (1000 items) | ~40ms | +8MB |
-
-### Resource Limits
-
-- **Memory**: < 50MB base, < 100MB under load
-- **File Size**: No hard limit, streaming with intelligent chunking
-- **Search Scope**: Respects `.gitignore` and exclusion patterns
-
-## 🔌 Protocol Details
-
-May-la implements the [Model Context Protocol](https://spec.modelcontextprotocol.io) (2025-11-25) with:
-- **JSON-RPC 2.0 messaging** over Unix sockets
-- **JSON-RPC 2.0 notifications** — One-way messages (no response required)
-- **Tool annotations** — Semantic hints for client optimization
-
-### Request Format
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "tool/read",
-  "params": {
-    "path": "/path/to/file.go",
-    "max_lines": 100
-  }
-}
-```
-
-### Response Format
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "contents": "...",
-    "line_count": 45,
-    "total_lines": 150
-  }
-}
-```
-
-### Error Handling
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "error": {
-    "code": -32603,
-    "message": "File not found",
-    "data": {
-      "path": "/nonexistent/file.go"
-    }
-  }
-}
-```
-
-## 🎯 Use Cases
-
-### 1. Code Navigation for Claude
-Provide Claude with fast, comprehensive code understanding:
-```
-1. Find relevant files with `find`
-2. Extract symbols with `symbols`
-3. Search implementation with `search`
-4. Read context with `read`
-```
-
-### 2. Persistent Memory
-Maintain long-term context across conversations:
-```
-1. Save insights with `memory_write`
-2. Retrieve context with `memory_read`
-3. Search semantically with `memory_search`
-4. Manage with `memory_list`
-```
-
-## 📝 License
-
-Apache License 2.0 — See [LICENSE](LICENSE) for details.
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-1. Check existing issues and PRs
-2. Test thoroughly with `make test-e2e`
-3. Keep performance targets in mind (< 50ms cold start)
-4. Document new tools in this README
-
-## 📚 Additional Resources
-
-- [MCP Specification](https://spec.modelcontextprotocol.io) — Protocol documentation
-- [Go 1.22 Release Notes](https://golang.org/doc/go1.22) — Language features
-- [ripgrep Documentation](https://github.com/BurntSushi/ripgrep) — Search engine
-- [Tree-sitter](https://tree-sitter.github.io) — Symbol extraction
-
-## 🐛 Troubleshooting
-
-### Installation Issues
-
-**Binaries not downloading**
-- Check internet connection
-- Verify GitHub is accessible: `curl -I https://github.com`
-- Check firewall/proxy settings
-
-**Permission denied on Linux/macOS**
-- Ensure binaries are executable: `chmod +x ~/.mayla/*`
-- Check directory permissions: `ls -ld ~/.mayla`
-
-### Runtime Issues
-
-**"Socket not found" error**
-- Daemon not running: Restart your IDE to trigger automatic daemon start
-- Workspace path issue: Check instance directory in `~/.mayla/instances/`
-- Stale socket: Run cleanup script `bash scripts/cleanup-stale-instances.sh`
-
-**Multiple workspaces conflict**
-- Each workspace should have isolated instance in `~/.mayla/instances/`
-- Check instance ID: Look at logs in `~/.mayla/logs/daemon-ws-*.log`
-- Verify workspace.path: `cat ~/.mayla/instances/ws-*/workspace.path`
-- If wrong workspace detected: Delete instance dir and restart
-
-**Orphaned daemon processes**
-- PPID monitoring should auto-cleanup (30s grace period)
-- Manual cleanup: `ps aux | grep mayla-daemon` then `kill <pid>`
-- Stale instance cleanup: Run `scripts/cleanup-stale-instances.sh`
-- Check locks: Remove `~/.mayla/instances/*/daemon.lock` if stuck
-
-**"Failed to acquire instance lock" error**
-- Another daemon is running for this workspace (expected behavior)
-- Lock file stuck: Check if process exists `ps aux | grep mayla-daemon`
-- If process dead: Remove `~/.mayla/instances/<instance-id>/daemon.lock`
-- Restart IDE to trigger fresh daemon start
-
-**High memory usage**
-- Normal: May-la uses <50MB base per instance, <100MB under load
-- Multiple instances: 5 workspaces = ~300MB total (expected)
-- If >150MB per instance: Check for memory leaks, report issue with `ps aux | grep mayla`
-
-**SQLite/FTS5 errors**
-- Verify CGO is enabled: `strings ~/.mayla/mayla | grep sqlite`
-- Should show SQLite symbols if CGO compiled correctly
-- If not: Re-download with installation command (may be old version)
-
-### Platform-Specific
-
-**macOS: Quarantine issues**
+**macOS: "Cannot be opened because the developer cannot be verified"**
 ```bash
-# Remove quarantine from both binaries
 xattr -d com.apple.quarantine ~/.mayla/mayla
-xattr -d com.apple.quarantine ~/.mayla/mayla-daemon
 ```
 
-**Linux: Missing dependencies**
-- CGO requires standard C libraries
-- Install: `sudo apt-get install libc6-dev` (Debian/Ubuntu)
-- Install: `sudo yum install glibc-devel` (RHEL/CentOS)
+**Binary not downloaded during install**
+- Check internet connection
+- Try: `npm install -g @alucardeht/may-la-mcp` again
+- Manual download: [GitHub Releases](https://github.com/alucardeht/may-la-mcp/releases)
 
-**Windows: Antivirus false positives**
-- Add exclusion: `%USERPROFILE%\.mayla\`
-- Binaries are signed and safe (check GitHub Actions build logs)
+## License
 
-### Getting Help
-
-If problems persist:
-1. Check [existing issues](https://github.com/alucardeht/may-la-mcp/issues)
-2. Include in your report:
-   - OS and architecture (`uname -a` on macOS/Linux, `systeminfo` on Windows)
-   - Error messages from IDE console
-3. Open new issue with details
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/alucardeht/may-la-mcp/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/alucardeht/may-la-mcp/discussions)
-- **Documentation**: [docs/](docs/) directory
-
----
-
-**Built with ⚡ for speed, 🎯 for precision, 💾 for persistence.**
+Apache License 2.0

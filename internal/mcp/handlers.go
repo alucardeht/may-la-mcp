@@ -1,38 +1,24 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"runtime/debug"
 	"time"
 
-	"github.com/alucardeht/may-la-mcp/internal/logger"
 	"github.com/alucardeht/may-la-mcp/internal/tools"
 	"github.com/alucardeht/may-la-mcp/pkg/protocol"
 	"github.com/alucardeht/may-la-mcp/pkg/version"
 )
 
-var log = logger.ForComponent("mcp")
-
 type Handler struct {
-	registry  *tools.Registry
-	startTime time.Time
-	initialized bool
-	clientInfo ClientInfo
-}
-
-type ClientInfo struct {
-	Name    string
-	Version string
+	registry *tools.Registry
 }
 
 func NewHandler(registry *tools.Registry) *Handler {
-	return &Handler{
-		registry:    registry,
-		startTime:   time.Now(),
-		initialized: false,
-		clientInfo:  ClientInfo{},
-	}
+	return &Handler{registry: registry}
 }
 
 func (h *Handler) Handle(req *Request) *Response {
@@ -43,15 +29,9 @@ func (h *Handler) Handle(req *Request) *Response {
 
 	switch req.Method {
 	case "initialize":
-		result, err := h.handleInitialize(req)
-		if err != nil {
-			resp.Error = &protocol.JSONRPCError{
-				Code:    -32603,
-				Message: err.Error(),
-			}
-		} else {
-			resp.Result = result
-		}
+		resp.Result = h.handleInitialize(req)
+	case "notifications/initialized":
+		return resp
 	case "ping":
 		resp.Result = map[string]interface{}{}
 	case "tools/list":
@@ -66,9 +46,6 @@ func (h *Handler) Handle(req *Request) *Response {
 		} else {
 			resp.Result = result
 		}
-	case "notifications/initialized":
-		h.handleInitializedNotification(req)
-		resp.Result = map[string]interface{}{}
 	default:
 		resp.Error = &protocol.JSONRPCError{
 			Code:    -32601,
@@ -79,31 +56,24 @@ func (h *Handler) Handle(req *Request) *Response {
 	return resp
 }
 
-func (h *Handler) handleInitialize(req *Request) (interface{}, error) {
-	initReq := struct {
-		ProtocolVersion string `json:"protocolVersion"`
-		ClientInfo struct {
-			Name    string `json:"name"`
-			Version string `json:"version"`
-		} `json:"clientInfo"`
-	}{}
-
-	paramsData, err := json.Marshal(req.Params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal params: %w", err)
+func (h *Handler) handleInitialize(req *Request) interface{} {
+	clientVersion := ""
+	if params, ok := req.Params["protocolVersion"]; ok {
+		if v, ok := params.(string); ok {
+			clientVersion = v
+		}
 	}
 
-	if err := json.Unmarshal(paramsData, &initReq); err != nil {
-		return nil, fmt.Errorf("failed to parse initialize request: %w", err)
+	negotiated := version.ProtocolVersion
+	for _, v := range version.SupportedProtocolVersions {
+		if clientVersion == v {
+			negotiated = v
+			break
+		}
 	}
-
-	h.clientInfo.Name = initReq.ClientInfo.Name
-	h.clientInfo.Version = initReq.ClientInfo.Version
-
-	negotiatedVersion := negotiateProtocolVersion(initReq.ProtocolVersion)
 
 	return map[string]interface{}{
-		"protocolVersion": negotiatedVersion,
+		"protocolVersion": negotiated,
 		"capabilities": map[string]interface{}{
 			"tools": map[string]interface{}{},
 		},
@@ -111,17 +81,7 @@ func (h *Handler) handleInitialize(req *Request) (interface{}, error) {
 			"name":    "May-la MCP Server",
 			"version": version.Version,
 		},
-	}, nil
-}
-
-func negotiateProtocolVersion(clientVersion string) string {
-	for _, v := range version.SupportedProtocolVersions {
-		if clientVersion == v {
-			return v
-		}
 	}
-
-	return version.ProtocolVersion
 }
 
 func (h *Handler) handleListTools() interface{} {
@@ -140,13 +100,8 @@ func (h *Handler) handleListTools() interface{} {
 			"inputSchema": schema,
 		}
 
-		if annotated, ok := t.(tools.AnnotatedTool); ok {
-			if title := annotated.Title(); title != "" {
-				toolData["title"] = title
-			}
-			if annotations := annotated.Annotations(); annotations != nil {
-				toolData["annotations"] = annotations
-			}
+		if annotations := t.Annotations(); annotations != nil {
+			toolData["annotations"] = annotations
 		}
 
 		toolsData[i] = toolData
@@ -157,53 +112,50 @@ func (h *Handler) handleListTools() interface{} {
 	}
 }
 
-func (h *Handler) handleInitializedNotification(req *Request) {
-	h.initialized = true
-}
-
 func (h *Handler) handleCallTool(req *Request) (result interface{}, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("tool execution panicked: %v", r)
-			log.Error("tool panic recovered",
-				"panic", r,
-				"stack", string(debug.Stack()))
+			err = fmt.Errorf("tool panic: %v", r)
+			slog.Error("tool panic", "panic", r, "stack", string(debug.Stack()))
 		}
 	}()
 
-	callReq := struct {
-		Name      string          `json:"name"`
-		Arguments json.RawMessage `json:"arguments"`
-	}{}
-
 	paramsData, err := json.Marshal(req.Params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal params: %w", err)
+		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 
+	var callReq struct {
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
+	}
 	if err := json.Unmarshal(paramsData, &callReq); err != nil {
-		return nil, fmt.Errorf("failed to parse tool call request: %w", err)
+		return nil, fmt.Errorf("invalid tool call: %w", err)
 	}
 
 	if callReq.Name == "" {
 		return nil, fmt.Errorf("tool name is required")
 	}
 
-	result, err = h.registry.ExecuteWithTimeout(callReq.Name, callReq.Arguments, 4*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	value, err := h.registry.Execute(ctx, callReq.Name, callReq.Arguments)
 	if err != nil {
 		return nil, err
 	}
 
-	resultJSON, err := json.Marshal(result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal result: %w", err)
+	text, ok := value.(string)
+	if !ok {
+		jsonBytes, _ := json.Marshal(value)
+		text = string(jsonBytes)
 	}
 
 	return map[string]interface{}{
 		"content": []map[string]interface{}{
 			{
 				"type": "text",
-				"text": string(resultJSON),
+				"text": text,
 			},
 		},
 	}, nil

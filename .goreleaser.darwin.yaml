@@ -1,9 +1,5 @@
 version: 2
 
-before:
-  hooks:
-    - go mod tidy
-
 builds:
   - id: mayla-darwin
     main: ./cmd/mayla
@@ -14,27 +10,7 @@ builds:
       - amd64
       - arm64
     env:
-      - CGO_ENABLED=1
-    flags:
-      - -tags=sqlite_fts5
-    ldflags:
-      - -s -w
-      - -X github.com/alucardeht/may-la-mcp/pkg/version.Version={{ .Version }}
-      - -X github.com/alucardeht/may-la-mcp/pkg/version.Commit={{ .Commit }}
-      - -X github.com/alucardeht/may-la-mcp/pkg/version.BuildDate={{ .Date }}
-
-  - id: mayla-daemon-darwin
-    main: ./cmd/mayla-daemon
-    binary: mayla-daemon
-    goos:
-      - darwin
-    goarch:
-      - amd64
-      - arm64
-    env:
-      - CGO_ENABLED=1
-    flags:
-      - -tags=sqlite_fts5
+      - CGO_ENABLED=0
     ldflags:
       - -s -w
       - -X github.com/alucardeht/may-la-mcp/pkg/version.Version={{ .Version }}
@@ -45,7 +21,6 @@ archives:
   - id: darwin
     builds:
       - mayla-darwin
-      - mayla-daemon-darwin
     format: binary
     name_template: "{{ .Binary }}-{{ .Os }}_{{ .Arch }}"
 

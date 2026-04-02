@@ -1,6 +1,6 @@
 {
   "name": "@alucardeht/may-la-mcp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "High-performance MCP server for code navigation — powered by Go, installed via npm",
   "bin": {
     "may-la-mcp": "./cli.js"
