@@ -200,6 +200,7 @@ func collectNative(ctx context.Context, pattern, root string, isRegex bool, incl
 			return nil
 		}
 		relPath, _ := filepath.Rel(root, path)
+		relPath = filepath.ToSlash(relPath)
 		if matcher.IsIgnored(relPath, info.IsDir()) {
 			if info.IsDir() {
 				return filepath.SkipDir

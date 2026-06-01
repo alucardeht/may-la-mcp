@@ -116,6 +116,7 @@ func (t *FindTool) Execute(ctx context.Context, input json.RawMessage) (interfac
 		}
 
 		relPath, _ := filepath.Rel(root, path)
+		relPath = filepath.ToSlash(relPath)
 
 		if matcher.IsIgnored(relPath, info.IsDir()) {
 			if info.IsDir() {

@@ -66,6 +66,7 @@ func New(root string) *Matcher {
 }
 
 func (m *Matcher) IsIgnored(relPath string, isDir bool) bool {
+	relPath = filepath.ToSlash(relPath)
 	ignored := false
 	name := filepath.Base(relPath)
 

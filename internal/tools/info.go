@@ -334,6 +334,7 @@ func buildTree(ctx context.Context, root string, maxDepth int, matcher *gitignor
 			}
 
 			relPath, _ := filepath.Rel(root, filepath.Join(dir, entry.Name()))
+			relPath = filepath.ToSlash(relPath)
 
 			if matcher.IsIgnored(relPath, entry.IsDir()) {
 				if entry.IsDir() {
@@ -344,10 +345,9 @@ func buildTree(ctx context.Context, root string, maxDepth int, matcher *gitignor
 
 			if entry.IsDir() {
 				if depth >= maxDepth {
-					fileCount := countFilesInDir(filepath.Join(dir, entry.Name()), matcher, root)
+					fileCount := scanDirStats(ctx, filepath.Join(dir, entry.Name()), matcher, root, extCounts)
 					fmt.Fprintf(&sb, "%s%s/   (%d files)\n", prefix, entry.Name(), fileCount)
 					totalFiles += fileCount
-					countExtensions(filepath.Join(dir, entry.Name()), matcher, root, extCounts)
 					continue
 				}
 				fmt.Fprintf(&sb, "%s%s/\n", prefix, entry.Name())
@@ -367,13 +367,17 @@ func buildTree(ctx context.Context, root string, maxDepth int, matcher *gitignor
 	return sb.String(), totalFiles, extCounts, ignoredDirs
 }
 
-func countFilesInDir(dir string, matcher *gitignore.Matcher, root string) int {
+func scanDirStats(ctx context.Context, dir string, matcher *gitignore.Matcher, root string, extCounts map[string]int) int {
 	count := 0
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if ctx.Err() != nil {
+			return filepath.SkipAll
+		}
 		if err != nil || info == nil {
 			return nil
 		}
 		relPath, _ := filepath.Rel(root, path)
+		relPath = filepath.ToSlash(relPath)
 		if matcher.IsIgnored(relPath, info.IsDir()) {
 			if info.IsDir() {
 				return filepath.SkipDir
@@ -382,25 +386,6 @@ func countFilesInDir(dir string, matcher *gitignore.Matcher, root string) int {
 		}
 		if !info.IsDir() {
 			count++
-		}
-		return nil
-	})
-	return count
-}
-
-func countExtensions(dir string, matcher *gitignore.Matcher, root string, extCounts map[string]int) {
-	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info == nil {
-			return nil
-		}
-		relPath, _ := filepath.Rel(root, path)
-		if matcher.IsIgnored(relPath, info.IsDir()) {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !info.IsDir() {
 			ext := filepath.Ext(info.Name())
 			if ext == "" {
 				ext = info.Name()
@@ -409,6 +394,7 @@ func countExtensions(dir string, matcher *gitignore.Matcher, root string, extCou
 		}
 		return nil
 	})
+	return count
 }
 
 func detectEntryPoints(ctx context.Context, root string, matcher *gitignore.Matcher) []string {
@@ -422,6 +408,7 @@ func detectEntryPoints(ctx context.Context, root string, matcher *gitignore.Matc
 			return nil
 		}
 		relPath, _ := filepath.Rel(root, path)
+		relPath = filepath.ToSlash(relPath)
 		if matcher.IsIgnored(relPath, info.IsDir()) {
 			if info.IsDir() {
 				return filepath.SkipDir

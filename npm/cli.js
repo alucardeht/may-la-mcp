@@ -26,12 +26,25 @@ const child = spawn(binaryPath, process.argv.slice(2), {
   stdio: 'inherit',
 });
 
+const killChild = (sig) => {
+  if (process.platform === 'win32') {
+    const { execSync } = require('node:child_process');
+    try {
+      execSync(`taskkill /pid ${child.pid} /T /F`);
+    } catch (e) {
+      // Ignored
+    }
+  } else {
+    child.kill(sig);
+  }
+};
+
 process.on('SIGINT', () => {
-  child.kill('SIGINT');
+  killChild('SIGINT');
 });
 
 process.on('SIGTERM', () => {
-  child.kill('SIGTERM');
+  killChild('SIGTERM');
 });
 
 child.on('exit', (code, signal) => {

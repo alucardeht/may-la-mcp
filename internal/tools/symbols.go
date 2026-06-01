@@ -249,6 +249,7 @@ func extractSymbolsFromDir(ctx context.Context, dir, kindFilter, query string, m
 		}
 
 		relPath, _ := filepath.Rel(dir, path)
+		relPath = filepath.ToSlash(relPath)
 		if matcher.IsIgnored(relPath, info.IsDir()) {
 			if info.IsDir() {
 				return filepath.SkipDir
